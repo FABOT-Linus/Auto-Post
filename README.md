@@ -145,7 +145,54 @@ crontab -e
 0 8 * * * cd /path/to/social_automation && /usr/bin/python3 main.py >> run.log 2>&1
 ```
 
-## Notes & caveats
+## 7. Run it in the cloud instead of your desktop
+
+You don't need to keep a computer running for this. Three good options:
+
+### Option A — GitHub Actions (free, easiest, no server to manage)
+
+This repo includes `.github/workflows/daily-social-post.yml`, which runs the
+pipeline automatically on a schedule using GitHub's free runners.
+
+1. Push this project to a GitHub repo (private is fine).
+2. Go to **Settings → Secrets and variables → Actions** and add one secret
+   for every value in your `.env` file (same names: `ANTHROPIC_API_KEY`,
+   `EMAIL_ADDRESS`, `LINKEDIN_ACCESS_TOKEN`, etc.).
+3. That's it — it runs automatically every day at the time set in the
+   workflow's `cron` line (default 8:00 AM UTC; edit it to your timezone).
+4. You can also trigger it manually any time from the repo's **Actions** tab
+   ("Run workflow" button) — useful for testing.
+5. Check the **Actions** tab after each run to see the printed output/logs,
+   same as you'd see in your terminal locally.
+
+This is free for reasonable usage on public repos, and free up to a
+generous monthly minutes quota on private repos too. Nothing runs unless
+scheduled, so there's no server cost when it's idle.
+
+### Option B — A small always-on cloud box (Railway, Render, Fly.io, a $5 VPS)
+
+Use this if you'd rather use the built-in `--schedule` mode (keeps a Python
+process running continuously with APScheduler) instead of GitHub's cron.
+
+1. Deploy this folder to the service of your choice.
+2. Set the same environment variables in their dashboard's "Environment
+   Variables" / "Secrets" section.
+3. Set the start command to: `python main.py --schedule --source google-news`
+4. The process stays alive and fires the pipeline daily at the time set in
+   `run_scheduler()` in `main.py`.
+
+### Option C — PythonAnywhere (beginner-friendly, has a free tier)
+
+1. Upload the project files via their file browser or `git clone`.
+2. Install dependencies in a Bash console: `pip install --user -r requirements.txt`
+3. Use their **Tasks** tab to schedule `python3.11 main.py --source google-news`
+   to run daily at a set time — no cron/YAML knowledge needed.
+
+Any of these three work — GitHub Actions (Option A) is the simplest if
+you're already comfortable with GitHub, since there's no server to keep
+alive or pay for.
+
+
 
 - **LinkedIn tokens expire** and need periodic refreshing via OAuth.
 - **Reddit** will throttle/ban accounts that post too frequently or look
