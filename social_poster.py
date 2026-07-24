@@ -123,22 +123,38 @@ def post_to_instagram(image_url: str, caption: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# OPTIONAL: generate + host the Instagram image automatically
+# Generate the Instagram image with Pollinations.ai (free, no API key)
 # ---------------------------------------------------------------------------
-def generate_image_from_prompt(prompt: str, out_path: str = "instagram_image.png") -> str:
+def generate_image_from_prompt(prompt: str, out_path: str = "instagram_image.png",
+                                width: int = 1024, height: int = 1024, seed: int = None) -> dict:
     """
-    Generates an image from the Instagram image prompt using OpenAI's image API,
-    saves it locally, and returns the local file path. You still need to upload
-    this file somewhere public (S3, Cloudinary, etc.) and pass that URL to
-    post_to_instagram - Instagram will not accept a local file path.
-    Swap this out for Midjourney/Flux/Stable Diffusion if you prefer.
-    """
-    from openai import OpenAI
+    Generates an image from the Instagram image prompt using Pollinations.ai
+    (https://pollinations.ai) - completely free, no API key required.
 
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    result = client.images.generate(model="gpt-image-1", prompt=prompt, size="1024x1024")
-    import base64
-    image_bytes = base64.b64decode(result.data[0].b64_json)
+    Returns a dict with:
+      - "url": a publicly accessible image URL you can pass DIRECTLY to
+        post_to_instagram() - no separate hosting/upload step needed.
+      - "local_path": a local copy of the same image, saved for your own
+        review before posting.
+
+    Swap this out for Midjourney/Flux/Stable Diffusion if you prefer -
+    just make sure whatever you swap in also returns a public URL.
+    """
+    from urllib.parse import quote
+    import random
+
+    if seed is None:
+        seed = random.randint(0, 2**31 - 1)  # avoids Pollinations' response cache reusing an old image
+
+    encoded_prompt = quote(prompt)
+    url = (
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+        f"?width={width}&height={height}&seed={seed}&nologo=true"
+    )
+
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
     with open(out_path, "wb") as f:
-        f.write(image_bytes)
-    return out_path
+        f.write(resp.content)
+
+    return {"url": url, "local_path": out_path}

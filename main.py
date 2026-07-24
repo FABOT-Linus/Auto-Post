@@ -1,8 +1,8 @@
 """
 main.py
 Orchestrates the full pipeline:
-  1. Read today's newsletter email
-  2. Generate platform-specific content with Claude
+  1. Read today's newsletter email (or fetch Google News top stories)
+  2. Generate platform-specific content with Groq's free-tier LLM API
   3. Post to LinkedIn, Reddit, and (optionally) Instagram
 
 Run once:
@@ -16,7 +16,6 @@ the built-in --schedule mode.
 """
 
 import argparse
-import sys
 import traceback
 from dotenv import load_dotenv
 
@@ -58,7 +57,7 @@ def run_pipeline(dry_run: bool = False, do_instagram: bool = False, source: str 
         print("No content found for today. Exiting.")
         return
 
-    print("[2/4] Generating platform-specific content with Claude...")
+    print("[2/4] Generating platform-specific content with Groq...")
     raw = generate_social_content(article_text)
     content = parse_content(raw)
 
@@ -94,19 +93,18 @@ def run_pipeline(dry_run: bool = False, do_instagram: bool = False, source: str 
         traceback.print_exc()
 
     if do_instagram:
-        print("[4/4] Generating + posting Instagram image...")
+        print("[4/4] Generating + posting Instagram image (via Pollinations.ai)...")
         try:
-            local_path = generate_image_from_prompt(content["instagram_image_prompt"])
-            print(f"  Image saved locally at {local_path}.")
-            print("  NOTE: you must upload this file to a public host and set")
-            print("  the resulting URL below before Instagram can publish it.")
-            # image_url = upload_to_your_host(local_path)  # implement this
-            # results.append(post_to_instagram(image_url, content["instagram_caption"]))
+            image = generate_image_from_prompt(content["instagram_image_prompt"])
+            print(f"  Image generated: {image['url']}")
+            print(f"  Local copy saved at {image['local_path']} for your review.")
+            results.append(post_to_instagram(image["url"], content["instagram_caption"]))
+            print("  Instagram: posted.")
         except Exception:
-            print("  Instagram image generation: FAILED")
+            print("  Instagram: FAILED")
             traceback.print_exc()
     else:
-        print("[4/4] Skipping Instagram (requires a public image URL - see README).")
+        print("[4/4] Skipping Instagram (pass --instagram to enable).")
 
     print("\nDone. Results:")
     for r in results:

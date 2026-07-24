@@ -1,8 +1,8 @@
 # Newsletter → Social Media Automation
 
-Reads your daily news email, sends it to Claude to generate LinkedIn,
-Instagram, and Reddit content (using your exact prompt spec), and posts it
-automatically.
+Reads your daily news email (or Google News), sends it to a free LLM to
+generate LinkedIn, Instagram, and Reddit content (using your exact prompt
+spec), and posts it automatically.
 
 ## Files
 
@@ -10,8 +10,8 @@ automatically.
 |---|---|
 | `email_reader.py` | Connects via IMAP, finds today's newsletter email, extracts clean text |
 | `google_news_fetcher.py` | Fetches the top N stories from Google News' RSS feed as an alternative content source |
-| `content_generator.py` | Sends the article to Claude, parses the response into per-platform content |
-| `social_poster.py` | Posts to LinkedIn, Reddit, Instagram via their APIs |
+| `content_generator.py` | Sends the article to Groq's free-tier LLM API, parses the response into per-platform content |
+| `social_poster.py` | Posts to LinkedIn, Reddit, Instagram via their APIs; generates the Instagram image via Pollinations.ai (free) |
 | `main.py` | Orchestrates the full pipeline; supports `--dry-run`, `--schedule`, and `--source` |
 | `.env.example` | Template for all required credentials |
 
@@ -36,9 +36,10 @@ cp .env.example .env
 4. Set `EMAIL_SENDER_FILTER` to the newsletter's sender address so it doesn't
    grab the wrong email.
 
-**Anthropic API:**
-1. Get a key at https://console.anthropic.com/
-2. Set `ANTHROPIC_API_KEY`.
+**Groq API (free):**
+1. Create a free account and API key at https://console.groq.com/keys
+2. Set `GROQ_API_KEY`.
+   Free tier has generous rate limits - more than enough for one run a day.
 
 **LinkedIn:**
 1. Create an app at https://www.linkedin.com/developers/apps
@@ -62,11 +63,9 @@ cp .env.example .env
 3. Generate a long-lived Page Access Token with `instagram_content_publish`
    permission.
 4. Set `IG_ACCESS_TOKEN` and `IG_BUSINESS_ACCOUNT_ID`.
-5. **Important limitation:** Instagram's API requires the image to be at a
-   public URL, not a local file. This script generates the image locally
-   (`generate_image_from_prompt`) but you must upload it to a public host
-   (S3, Cloudinary, your own server, etc.) before Instagram can publish it.
-   Fill in that upload step in `main.py` where marked.
+5. That's it — the Instagram image is generated via Pollinations.ai (free,
+   no key needed), which returns a public URL directly usable by Instagram's
+   API. No separate image-hosting step required.
 
 ## 3. Choose your content source: email or Google News
 
@@ -92,8 +91,8 @@ python main.py --source google-news --topic TECHNOLOGY
 python main.py --source google-news --query "artificial intelligence"
 ```
 
-All 5 (or `--top-n`) stories are combined into one digest and sent to Claude
-in a single call, exactly like the newsletter email body was - Claude then
+All 5 (or `--top-n`) stories are combined into one digest and sent to the LLM
+in a single call, exactly like the newsletter email body was - the model then
 follows the same "identify the most important insight" rule from the
 prompt to decide what to lead with in the LinkedIn/Instagram/Reddit posts.
 
@@ -156,7 +155,7 @@ pipeline automatically on a schedule using GitHub's free runners.
 
 1. Push this project to a GitHub repo (private is fine).
 2. Go to **Settings → Secrets and variables → Actions** and add one secret
-   for every value in your `.env` file (same names: `ANTHROPIC_API_KEY`,
+   for every value in your `.env` file (same names: `GROQ_API_KEY`,
    `EMAIL_ADDRESS`, `LINKEDIN_ACCESS_TOKEN`, etc.).
 3. That's it — it runs automatically every day at the time set in the
    workflow's `cron` line (default 8:00 AM UTC; edit it to your timezone).
@@ -192,13 +191,17 @@ Any of these three work — GitHub Actions (Option A) is the simplest if
 you're already comfortable with GitHub, since there's no server to keep
 alive or pay for.
 
-
+## Notes & caveats
 
 - **LinkedIn tokens expire** and need periodic refreshing via OAuth.
 - **Reddit** will throttle/ban accounts that post too frequently or look
   automated — read the subreddit's rules and Reddit's API terms before
   running this unattended.
-- **Instagram** publishing has the extra image-hosting step described above.
+- **Groq's free tier** has rate limits that reset periodically — fine for
+  one run a day, but if you increase frequency a lot you may hit them.
+- **Pollinations.ai** is a free community service with no uptime SLA —
+  if an image generation call fails, the pipeline logs it and still posts
+  to LinkedIn/Reddit; only the Instagram step is skipped for that run.
 - The email parser grabs the **most recent email matching today's date and
   your filters** — tune `EMAIL_SENDER_FILTER` / `EMAIL_SUBJECT_FILTER` in
   `.env` to make sure it picks up the right one.

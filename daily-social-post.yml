@@ -30,8 +30,8 @@ jobs:
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
           EMAIL_SENDER_FILTER: ${{ secrets.EMAIL_SENDER_FILTER }}
           EMAIL_SUBJECT_FILTER: ${{ secrets.EMAIL_SUBJECT_FILTER }}
-          # Anthropic
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Groq (content generation)
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           # LinkedIn
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
@@ -45,8 +45,7 @@ jobs:
           # Instagram
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_BUSINESS_ACCOUNT_ID: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
-          # Image generation
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # (No image-gen key needed - Pollinations.ai is free and keyless)
         run: |
           # Change --source / add --instagram as you like.
           # Start with --dry-run while you're first setting this up!

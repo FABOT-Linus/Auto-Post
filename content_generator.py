@@ -1,13 +1,17 @@
 """
 content_generator.py
-Sends the article/newsletter text to Claude using the Social Media Content
+Sends the article/newsletter text to an LLM using the Social Media Content
 Automation Agent prompt, then parses the structured response into a dict
 so each platform's content can be posted programmatically.
+
+Uses Groq's free-tier API (OpenAI-compatible), which hosts fast open models
+like Llama 3.3 at no cost within generous rate limits.
+Get a free API key at: https://console.groq.com/keys
 """
 
 import os
 import re
-import anthropic
+from groq import Groq
 
 SYSTEM_PROMPT = """You are a Social Media Content Automation Agent.
 
@@ -52,17 +56,17 @@ the first comment under the Reddit post.]
 """
 
 
-def generate_social_content(article_text: str, model: str = "claude-sonnet-4-6") -> str:
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    response = client.messages.create(
+def generate_social_content(article_text: str, model: str = "llama-3.3-70b-versatile") -> str:
+    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    completion = client.chat.completions.create(
         model=model,
         max_tokens=2000,
-        system=SYSTEM_PROMPT,
         messages=[
-            {"role": "user", "content": f"ARTICLE:\n{article_text}"}
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"ARTICLE:\n{article_text}"},
         ],
     )
-    return "".join(block.text for block in response.content if block.type == "text")
+    return completion.choices[0].message.content
 
 
 def parse_content(raw_text: str) -> dict:
