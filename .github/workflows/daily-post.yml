@@ -1,0 +1,56 @@
+name: Daily Financial News Post
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  post-news:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Daily Financial News Poster
+        env:
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_BUSINESS_ACCOUNT_ID: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
+          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+          LINKEDIN_MEMBER_URN: ${{ secrets.LINKEDIN_MEMBER_URN }}
+          NEWS_KEYWORDS: ${{ vars.NEWS_KEYWORDS }}
+          NEWS_CATEGORIES: ${{ vars.NEWS_CATEGORIES }}
+          MAX_HEADLINES: ${{ vars.MAX_HEADLINES }}
+          ENABLE_X: ${{ vars.ENABLE_X }}
+          ENABLE_X_IMAGE: ${{ vars.ENABLE_X_IMAGE }}
+          ENABLE_FACEBOOK: ${{ vars.ENABLE_FACEBOOK }}
+          ENABLE_INSTAGRAM: ${{ vars.ENABLE_INSTAGRAM }}
+          ENABLE_LINKEDIN: ${{ vars.ENABLE_LINKEDIN }}
+        run: |
+          python main.py 2>&1 | tee post_output.log
+
+      - name: Email notification
+        if: always()
+        uses: dawidd6/action-send-mail@v4
+        with:
+          server_address: [smtp.gmail.com](https://smtp.gmail.com)
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: BOBNews Daily Post Result
+          body: "Check the workflow run in GitHub Actions for details. Job status: ${{ job.status }}"
+          to: ${{ secrets.EMAIL_TO }}
+          from: BOBNews Bot
