@@ -1,12 +1,14 @@
 """Post to a Facebook Page via the Graph API.
 
-If the provided token is a user access token (not a page token), this module
-automatically fetches the page-specific access token from /me/accounts.
+Posts an image (news card) with a text caption for maximum engagement.
+Falls back to text-only if image generation/upload fails.
 """
 
 import os
+import io
 import logging
 import requests
+from image_generator import generate_news_image
 
 log = logging.getLogger("facebook_poster")
 
@@ -24,10 +26,8 @@ def _get_page_id():
 
 
 def _resolve_page_token(access_token, page_id):
-    """If the given token is a user token, fetch the page-specific access token.
-    Returns the best token to use for posting as the page."""
+    """If the given token is a user token, fetch the page-specific access token."""
     try:
-        # Try fetching the page access token via /me/accounts
         resp = requests.get(
             f"{FB_GRAPH_URL}/me/accounts?access_token={access_token}",
             timeout=10,
@@ -40,40 +40,91 @@ def _resolve_page_token(access_token, page_id):
                     if page_token:
                         log.info("Extracted page access token for %s (%s)", page.get("name"), page_id)
                         return page_token
-        # Token might already be a page token — return as-is
     except Exception as e:
         log.warning("Could not resolve page token: %s", e)
-
     return access_token
 
 
-def post_to_facebook(text):
-    """Posts a text update to a Facebook Page. Returns dict with success/status."""
+def _upload_image_to_public_host(image_bytes):
+    """Upload image to freeimage.host and return the direct URL."""
+    import base64
     try:
-        page_id = _get_page_id()
-        access_token = _get_access_token()
-
-        if not access_token:
-            return {"success": False, "error": "Missing Facebook access token — set FB_PAGE_ACCESS_TOKEN or FACEBOOK_ACCESS_TOKEN in .env"}
-        if not page_id:
-            return {"success": False, "error": "Missing Facebook Page ID — set FB_PAGE_ID in .env"}
-
-        # Resolve page-specific token (handles user tokens automatically)
-        access_token = _resolve_page_token(access_token, page_id)
-
-        url = f"{FB_GRAPH_URL}/{page_id}/feed"
-        payload = {
-            "message": text,
-            "access_token": access_token,
-        }
-
-        resp = requests.post(url, data=payload, timeout=15)
+        image_bytes.seek(0)
+        b64 = base64.b64encode(image_bytes.getvalue()).decode()
+        resp = requests.post(
+            "https://freeimage.host/api/1/upload",
+            data={
+                "key": "6d207e02198a847aa98d0a2a901485a5",
+                "action": "upload",
+                "source": b64,
+                "type": "file",
+            },
+            timeout=30,
+        )
         resp.raise_for_status()
         data = resp.json()
+        if data.get("status_code") == 200 and data.get("image", {}).get("url"):
+            url = data["image"]["url"]
+            log.info("Image uploaded to freeimage.host: %s", url)
+            return url
+    except Exception as e:
+        log.warning("freeimage.host upload failed: %s", e)
+    return None
 
-        post_id = data.get("id", "")
-        log.info("Posted to Facebook — post ID: %s", post_id)
-        return {"success": True, "post_id": post_id}
+
+def post_to_facebook(text, headlines=None):
+    """Posts an image card + caption to a Facebook Page.
+    Falls back to text-only if image upload fails.
+    Returns dict with success/status."""
+    try:
+        access_token = _get_access_token()
+        page_id = _get_page_id()
+
+        if not access_token:
+            return {"success": False, "error": "Missing Facebook access token"}
+        if not page_id:
+            return {"success": False, "error": "Missing Facebook Page ID"}
+
+        # Resolve page token
+        access_token = _resolve_page_token(access_token, page_id)
+
+        # Try image post first (if headlines provided)
+        if headlines:
+            try:
+                image_bytes = generate_news_image(headlines, platform="facebook")
+                image_url = _upload_image_to_public_host(image_bytes)
+
+                if image_url:
+                    log.info("Posting image card to Facebook...")
+                    # Post photo with caption
+                    resp = requests.post(
+                        f"{FB_GRAPH_URL}/{page_id}/photos",
+                        data={
+                            "url": image_url,
+                            "message": text,
+                            "access_token": access_token,
+                        },
+                        timeout=30,
+                    )
+                    resp.raise_for_status()
+                    post_id = resp.json().get("id", "")
+                    if post_id:
+                        log.info("Posted to Facebook with image — post ID: %s", post_id)
+                        return {"success": True, "post_id": post_id, "image": True}
+            except Exception as e:
+                log.warning("Image post failed, falling back to text: %s", e)
+
+        # Fallback: text-only post
+        log.info("Posting text-only to Facebook...")
+        resp = requests.post(
+            f"{FB_GRAPH_URL}/{page_id}/feed",
+            data={"message": text, "access_token": access_token},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        post_id = resp.json().get("id", "")
+        log.info("Posted to Facebook (text only) — post ID: %s", post_id)
+        return {"success": True, "post_id": post_id, "image": False}
 
     except Exception as e:
         log.error("Facebook post failed: %s", e)

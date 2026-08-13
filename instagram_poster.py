@@ -1,11 +1,6 @@
 """Post to Instagram Business account via the Instagram Graph API.
 
-Instagram does NOT support text-only posts. This module generates
-a simple image card from the first headline using Pillow, uploads it,
-and publishes it.
-
-Image hosting: uses tmpfiles.org (free, no API key required).
-Fallback: 0x0.st if tmpfiles.org is unavailable.
+Generates a professional news card image and posts it with a caption.
 """
 
 import os
@@ -13,7 +8,7 @@ import io
 import time
 import logging
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from image_generator import generate_news_image
 
 log = logging.getLogger("instagram_poster")
 
@@ -27,12 +22,12 @@ def post_to_instagram(caption, headlines):
         ig_account_id = os.getenv("IG_BUSINESS_ACCOUNT_ID")
 
         if not access_token:
-            return {"success": False, "error": "Missing Instagram access token — set IG_ACCESS_TOKEN in .env"}
+            return {"success": False, "error": "Missing Instagram access token"}
         if not ig_account_id:
-            return {"success": False, "error": "Missing Instagram Business Account ID — set IG_BUSINESS_ACCOUNT_ID in .env"}
+            return {"success": False, "error": "Missing Instagram Business Account ID"}
 
-        # --- Step 1: Generate image card from headline ---
-        image_bytes = _generate_image_card(headlines)
+        # --- Step 1: Generate professional image card ---
+        image_bytes = generate_news_image(headlines, platform="instagram")
         image_url = _upload_image_to_public_host(image_bytes)
 
         if not image_url:
@@ -71,82 +66,16 @@ def post_to_instagram(caption, headlines):
         return {"success": False, "error": str(e)}
 
 
-def _generate_image_card(headlines):
-    """Generates a 1080x1080 image card with the headline text."""
-    width, height = 1080, 1080
-    bg_color = (20, 20, 30)
-    text_color = (255, 255, 255)
-    accent_color = (0, 150, 255)
-
-    img = Image.new("RGB", (width, height), bg_color)
-    draw = ImageDraw.Draw(img)
-
-    # Title
-    try:
-        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
-        body_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
-    except (IOError, OSError):
-        title_font = ImageFont.load_default()
-        body_font = ImageFont.load_default()
-
-    # Header
-    draw.text((50, 50), "BOBNews Daily", fill=accent_color, font=title_font)
-
-    # Headlines
-    y = 150
-    for i, h in enumerate(headlines, 1):
-        # Wrap text
-        lines = _wrap_text(draw, f"{i}. {h['title']}", body_font, width - 100)
-        for line in lines:
-            draw.text((50, y), line, fill=text_color, font=body_font)
-            y += 40
-        y += 20
-
-    # Footer
-    draw.text((50, height - 60), "#BOBNews #DailyNews", fill=accent_color, font=body_font)
-
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=90)
-    buf.seek(0)
-    return buf
-
-
-def _wrap_text(draw, text, font, max_width):
-    """Wraps text to fit within max_width."""
-    words = text.split()
-    lines = []
-    current = ""
-    for word in words:
-        test = f"{current} {word}".strip()
-        bbox = draw.textbbox((0, 0), test, font=font)
-        if bbox[2] - bbox[0] <= max_width:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines
-
-
 def _upload_image_to_public_host(image_bytes):
-    """
-    Upload image to a free public host so Instagram can fetch it.
-    Primary: freeimage.host (free, no API key required)
-    Fallback: 0x0.st
-    Returns a direct image URL or None on failure.
-    """
+    """Upload image to freeimage.host and return the direct URL."""
     import base64
-
-    # Try freeimage.host first (reliable, returns direct image URL)
     try:
         image_bytes.seek(0)
         b64 = base64.b64encode(image_bytes.getvalue()).decode()
         resp = requests.post(
             "https://freeimage.host/api/1/upload",
             data={
-                "key": "6d207e02198a847aa98d0a2a901485a5",  # public demo key
+                "key": "6d207e02198a847aa98d0a2a901485a5",
                 "action": "upload",
                 "source": b64,
                 "type": "file",

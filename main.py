@@ -73,7 +73,7 @@ def main():
         try:
             from facebook_poster import post_to_facebook
             log.info("Posting to Facebook...")
-            results["facebook"] = post_to_facebook(posts["facebook"])
+            results["facebook"] = post_to_facebook(posts["facebook"], headlines=headlines)
             log.info("Facebook result: %s", results["facebook"])
         except Exception as e:
             log.error("Facebook post failed: %s", e)
@@ -93,7 +93,7 @@ def main():
         try:
             from linkedin_poster import post_to_linkedin
             log.info("Posting to LinkedIn...")
-            results["linkedin"] = post_to_linkedin(posts["linkedin"])
+            results["linkedin"] = post_to_linkedin(posts["linkedin"], headlines=headlines)
             log.info("LinkedIn result: %s", results["linkedin"])
         except Exception as e:
             log.error("LinkedIn post failed: %s", e)
