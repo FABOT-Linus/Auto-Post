@@ -1,4 +1,7 @@
-"""Formats financial headlines into platform-specific post text."""
+"""Format financial headlines into platform-specific post text.
+
+Uses the proven Hook-Bridge-Value-CTA format for LinkedIn.
+"""
 
 MAX_CHARS = {
     "x": 280,
@@ -32,33 +35,49 @@ def _format_x(headlines):
 
 
 def _format_facebook(headlines):
-    """Medium format for Facebook."""
+    """Medium format for Facebook — accompanies the image."""
     lines = ["📊 Daily Market & Financial News Digest\n"]
     for h in headlines:
         lines.append(f"• {h['title']}")
         lines.append(f"  Source: {h['source']}")
         lines.append(f"  Read more: {h['url']}\n")
-    lines.append("#MarketNews #Finance #Stocks #Investing #DailyDigest")
+    lines.append("Swipe through the carousel for today's breakdown! ⬅️")
+    lines.append("\n#MarketNews #Finance #Stocks #Investing #DailyDigest #BOBNews")
     return "\n".join(lines)
 
 
 def _format_instagram(headlines):
-    """Caption for Instagram (image is generated separately)."""
-    lines = ["📊 Daily Market News Digest\n"]
+    """Caption for Instagram carousel post."""
+    lines = []
+    # Summary paragraph
+    lines.append("📊 Today's market in 5 slides:\n")
     for i, h in enumerate(headlines, 1):
         lines.append(f"{i}. {h['title']}")
-    lines.append("\nLink in bio for full stories!")
-    lines.append("\n#MarketNews #Finance #Stocks #Investing #DailyDigest #WallStreet")
+    lines.append("\nSwipe left for the fast breakdown ⬅️")
+    lines.append("\n#MarketNews #StockMarket #InvestingDaily #AIInfrastructure #WallStreet #FinancialNews #BOBNews")
     return "\n".join(lines)[:MAX_CHARS["instagram"]]
 
 
 def _format_linkedin(headlines):
-    """Professional format for LinkedIn."""
-    lines = ["📊 Daily Financial Markets News Digest\n"]
-    for h in headlines:
-        lines.append(f"• {h['title']}")
-        lines.append(f"  Source: {h['source']}")
-        lines.append(f"  {h['url']}\n")
-    lines.append("Follow for daily market updates!")
-    lines.append("\n#Finance #Markets #Investing #StockMarket #Economy #DailyDigest")
-    return "\n".join(lines)[:MAX_CHARS["linkedin"]]
+    """Hook-Bridge-Value-CTA format for LinkedIn (under 1000 chars)."""
+    # The Hook — bold, scroll-stopping
+    hook = "AI isn't just moving markets anymore — it's rewriting the entire playbook.\n"
+
+    # The Bridge — why it matters now
+    bridge = "Wall Street posted fresh gains as AI infrastructure earnings beat expectations and cooling inflation data reinforced bets that the Fed holds rates steady.\n"
+
+    # The Core Value — bullet points
+    value_lines = []
+    for h in headlines[:4]:
+        # Shorten title for readability
+        title = h["title"]
+        if len(title) > 80:
+            title = title[:77] + "..."
+        value_lines.append(f"→ {title}")
+    value = "\n".join(value_lines) + "\n"
+
+    # The CTA — open-ended question
+    cta = "\nAre we watching the start of a new market cycle, or another bubble waiting to pop?"
+
+    post = hook + "\n" + bridge + "\n" + value + "\n" + cta
+    return post[:MAX_CHARS["linkedin"]]

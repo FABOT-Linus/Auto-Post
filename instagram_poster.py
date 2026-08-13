@@ -1,6 +1,8 @@
 """Post to Instagram Business account via the Instagram Graph API.
 
-Generates a professional news card image and posts it with a caption.
+Supports two modes:
+1. Carousel post (multiple slides) — when headlines are provided
+2. Single image post — fallback
 """
 
 import os
@@ -9,6 +11,7 @@ import time
 import logging
 import requests
 from image_generator import generate_news_image
+from carousel_generator import generate_all_slides
 
 log = logging.getLogger("instagram_poster")
 
@@ -16,7 +19,7 @@ IG_GRAPH_URL = "https://graph.facebook.com/v19.0"
 
 
 def post_to_instagram(caption, headlines):
-    """Generates an image card and posts to Instagram. Returns dict with success/status."""
+    """Posts a carousel of slides to Instagram. Returns dict with success/status."""
     try:
         access_token = os.getenv("IG_ACCESS_TOKEN") or os.getenv("FACEBOOK_ACCESS_TOKEN")
         ig_account_id = os.getenv("IG_BUSINESS_ACCOUNT_ID")
@@ -26,40 +29,125 @@ def post_to_instagram(caption, headlines):
         if not ig_account_id:
             return {"success": False, "error": "Missing Instagram Business Account ID"}
 
-        # --- Step 1: Generate professional image card ---
-        image_bytes = generate_news_image(headlines, platform="instagram")
-        image_url = _upload_image_to_public_host(image_bytes)
+        # --- Step 1: Generate all carousel slides ---
+        log.info("Generating 5 carousel slides...")
+        slides = generate_all_slides(headlines)
 
-        if not image_url:
-            return {"success": False, "error": "Failed to host image"}
+        # --- Step 2: Upload all slides to public host ---
+        image_urls = []
+        for i, slide in enumerate(slides, 1):
+            url = _upload_image_to_public_host(slide)
+            if url:
+                image_urls.append(url)
+                log.info("Slide %d uploaded: %s", i, url)
+            else:
+                log.warning("Slide %d upload failed", i)
 
-        # --- Step 2: Create media container ---
-        container_url = f"{IG_GRAPH_URL}/{ig_account_id}/media"
-        container_payload = {
-            "image_url": image_url,
-            "caption": caption,
-            "access_token": access_token,
-        }
-        resp = requests.post(container_url, data=container_payload, timeout=30)
-        resp.raise_for_status()
-        creation_id = resp.json().get("id")
+        if not image_urls:
+            return {"success": False, "error": "Failed to host any carousel images"}
 
-        if not creation_id:
-            return {"success": False, "error": "Failed to create media container"}
+        # --- Step 3: Create carousel (if 2+ images) or single post ---
+        if len(image_urls) >= 2:
+            log.info("Creating Instagram carousel with %d slides...", len(image_urls))
 
-        # --- Step 3: Wait for image processing, then publish ---
-        time.sleep(5)
-        publish_url = f"{IG_GRAPH_URL}/{ig_account_id}/media_publish"
-        publish_payload = {
-            "creation_id": creation_id,
-            "access_token": access_token,
-        }
-        resp = requests.post(publish_url, data=publish_payload, timeout=30)
-        resp.raise_for_status()
-        media_id = resp.json().get("id", "")
+            # Create a children container for each image
+            children_ids = []
+            for i, img_url in enumerate(image_urls):
+                resp = requests.post(
+                    f"{IG_GRAPH_URL}/{ig_account_id}/media",
+                    data={
+                        "image_url": img_url,
+                        "is_carousel_item": "true",
+                        "access_token": access_token,
+                    },
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                child_id = resp.json().get("id")
+                if child_id:
+                    children_ids.append(child_id)
+                    log.info("Carousel item %d created: %s", i + 1, child_id)
 
-        log.info("Posted to Instagram — media ID: %s", media_id)
-        return {"success": True, "media_id": media_id}
+            if len(children_ids) < 2:
+                log.warning("Not enough carousel items created, falling back to single image")
+                # Fall back to single image
+                resp = requests.post(
+                    f"{IG_GRAPH_URL}/{ig_account_id}/media",
+                    data={
+                        "image_url": image_urls[0],
+                        "caption": caption,
+                        "access_token": access_token,
+                    },
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                creation_id = resp.json().get("id")
+                time.sleep(5)
+                resp = requests.post(
+                    f"{IG_GRAPH_URL}/{ig_account_id}/media_publish",
+                    data={"creation_id": creation_id, "access_token": access_token},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                media_id = resp.json().get("id", "")
+                log.info("Posted single image to Instagram — media ID: %s", media_id)
+                return {"success": True, "media_id": media_id, "carousel": False}
+
+            # Create the carousel container
+            children_param = ",".join(children_ids)
+            resp = requests.post(
+                f"{IG_GRAPH_URL}/{ig_account_id}/media",
+                data={
+                    "media_type": "CAROUSEL",
+                    "children": children_param,
+                    "caption": caption,
+                    "access_token": access_token,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            creation_id = resp.json().get("id")
+
+            if not creation_id:
+                return {"success": False, "error": "Failed to create carousel container"}
+
+            # Wait for processing then publish
+            time.sleep(5)
+            resp = requests.post(
+                f"{IG_GRAPH_URL}/{ig_account_id}/media_publish",
+                data={"creation_id": creation_id, "access_token": access_token},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            media_id = resp.json().get("id", "")
+
+            log.info("Posted carousel to Instagram — media ID: %s (%d slides)", media_id, len(children_ids))
+            return {"success": True, "media_id": media_id, "carousel": True, "slides": len(children_ids)}
+
+        else:
+            # Single image fallback
+            log.info("Posting single image to Instagram...")
+            resp = requests.post(
+                f"{IG_GRAPH_URL}/{ig_account_id}/media",
+                data={
+                    "image_url": image_urls[0],
+                    "caption": caption,
+                    "access_token": access_token,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            creation_id = resp.json().get("id")
+            time.sleep(5)
+            resp = requests.post(
+                f"{IG_GRAPH_URL}/{ig_account_id}/media_publish",
+                data={"creation_id": creation_id, "access_token": access_token},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            media_id = resp.json().get("id", "")
+            log.info("Posted single image to Instagram — media ID: %s", media_id)
+            return {"success": True, "media_id": media_id, "carousel": False}
 
     except Exception as e:
         log.error("Instagram post failed: %s", e)
@@ -86,7 +174,6 @@ def _upload_image_to_public_host(image_bytes):
         data = resp.json()
         if data.get("status_code") == 200 and data.get("image", {}).get("url"):
             url = data["image"]["url"]
-            log.info("Image uploaded to freeimage.host: %s", url)
             return url
     except Exception as e:
         log.warning("freeimage.host upload failed: %s — trying fallback", e)
@@ -102,7 +189,6 @@ def _upload_image_to_public_host(image_bytes):
         resp.raise_for_status()
         url = resp.text.strip()
         if url:
-            log.info("Image uploaded to 0x0.st: %s", url)
             return url
     except Exception as e:
         log.error("0x0.st upload also failed: %s", e)
