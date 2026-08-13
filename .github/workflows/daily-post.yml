@@ -41,16 +41,3 @@ jobs:
           ENABLE_LINKEDIN: ${{ vars.ENABLE_LINKEDIN }}
         run: |
           python main.py 2>&1 | tee post_output.log
-
-      - name: Email notification
-        if: always()
-        uses: dawidd6/action-send-mail@v4
-        with:
-          server_address: [smtp.gmail.com](https://smtp.gmail.com)
-          server_port: 465
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: BOBNews Daily Post Result
-          body: "Check the workflow run in GitHub Actions for details. Job status: ${{ job.status }}"
-          to: ${{ secrets.EMAIL_TO }}
-          from: BOBNews Bot
