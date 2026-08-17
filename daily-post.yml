@@ -2,9 +2,9 @@ name: Daily Financial News Post
 
 on:
   schedule:
-    # Runs at 08:00 UTC daily (adjust as needed)
-    # UTC 08:00 = 04:00 ET / 01:00 PT
-    - cron: "0 8 * * *"
+    # Runs at 13:40 UTC daily (adjust as needed)
+    # UTC 13:40 = 09:40 ET / 06:40 PT
+    - cron: "40 13 * * *"
   workflow_dispatch: # Allow manual trigger for testing
 
 jobs:
