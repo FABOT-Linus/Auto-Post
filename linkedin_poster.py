@@ -2,6 +2,7 @@
 
 Posts a professional news card image with a text caption.
 Falls back to text-only if image upload fails.
+Uses the v2 UGC API which is compatible with the w_member_social scope.
 """
 
 import os
@@ -13,7 +14,7 @@ from image_generator import generate_news_image
 
 log = logging.getLogger("linkedin_poster")
 
-LINKEDIN_API_URL = "https://api.linkedin.com/rest"
+LINKEDIN_API_URL = "https://api.linkedin.com/v2"
 
 
 def post_to_linkedin(text, headlines=None):
@@ -46,6 +47,13 @@ def post_to_linkedin(text, headlines=None):
 
         author = member_urn
 
+        # Common headers for v2 API
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "X-Restli-Protocol-Version": "2.0.0",
+            "Content-Type": "application/json",
+        }
+
         # Try image post first (if headlines provided)
         if headlines:
             try:
@@ -53,24 +61,30 @@ def post_to_linkedin(text, headlines=None):
                 if image_url:
                     log.info("Posting image card to LinkedIn...")
 
-                    # Step 1: Register image upload
+                    # Step 1: Register image upload via v2 assets API
                     register_resp = requests.post(
-                        f"{LINKEDIN_API_URL}/images?action=initializeUpload",
-                        headers={
-                            "Authorization": f"Bearer {access_token}",
-                            "Content-Type": "application/json",
-                        },
+                        f"{LINKEDIN_API_URL}/assets?action=registerUpload",
+                        headers=headers,
                         json={
-                            "initializeUploadRequest": {
+                            "registerUploadRequest": {
+                                "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
                                 "owner": author,
+                                "serviceRelationships": [
+                                    {
+                                        "relationshipType": "STORAGE",
+                                        "identifier": "urn:li:userGeneratedContent",
+                                    }
+                                ],
                             }
                         },
                         timeout=30,
                     )
                     register_resp.raise_for_status()
                     upload_data = register_resp.json().get("value", {})
-                    upload_urn = upload_data.get("image", "")
-                    upload_url = upload_data.get("uploadUrl", "")
+                    upload_urn = upload_data.get("asset", "")
+                    upload_url = upload_data.get("uploadMechanism", {}).get(
+                        "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {}
+                    ).get("uploadUrl", "")
 
                     if not upload_urn or not upload_url:
                         raise Exception("Failed to get LinkedIn image upload URL")
@@ -87,33 +101,36 @@ def post_to_linkedin(text, headlines=None):
                     )
                     upload_resp.raise_for_status()
 
-                    # Step 3: Create the post with image
+                    # Step 3: Create the UGC post with image
                     post_payload = {
                         "author": author,
-                        "commentary": text,
-                        "visibility": "PUBLIC",
-                        "distribution": {
-                            "feedDistribution": "MAIN_FEED",
-                            "targetEntities": [],
-                            "thirdPartyDistributionChannels": [],
-                        },
-                        "content": {
-                            "media": {
-                                "title": "BOBNews Daily Market Digest",
-                                "id": upload_urn,
+                        "lifecycleState": "PUBLISHED",
+                        "specificContent": {
+                            "com.linkedin.ugc.ShareContent": {
+                                "shareCommentary": {"text": text},
+                                "shareMediaCategory": "IMAGE",
+                                "media": [
+                                    {
+                                        "status": "READY",
+                                        "description": {
+                                            "text": "BOBNews Daily Market Digest"
+                                        },
+                                        "media": upload_urn,
+                                        "title": {
+                                            "text": "BOBNews Daily Market Digest"
+                                        },
+                                    }
+                                ],
                             }
                         },
-                        "lifecycleState": "PUBLISHED",
-                        "isReshareDisabled": False,
+                        "visibility": {
+                            "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+                        },
                     }
 
                     resp = requests.post(
-                        f"{LINKEDIN_API_URL}/posts",
-                        headers={
-                            "Authorization": f"Bearer {access_token}",
-                            "Content-Type": "application/json",
-                            "X-Restli-Protocol-Version": "2.0.0",
-                        },
+                        f"{LINKEDIN_API_URL}/ugcPosts",
+                        headers=headers,
                         json=post_payload,
                         timeout=30,
                     )
@@ -125,28 +142,25 @@ def post_to_linkedin(text, headlines=None):
             except Exception as e:
                 log.warning("LinkedIn image post failed, falling back to text: %s", e)
 
-        # Fallback: Text-only post
+        # Fallback: Text-only post via v2 UGC API
         log.info("Posting text-only to LinkedIn as: %s", author)
         post_payload = {
             "author": author,
-            "commentary": text,
-            "visibility": "PUBLIC",
-            "distribution": {
-                "feedDistribution": "MAIN_FEED",
-                "targetEntities": [],
-                "thirdPartyDistributionChannels": [],
-            },
             "lifecycleState": "PUBLISHED",
-            "isReshareDisabled": False,
+            "specificContent": {
+                "com.linkedin.ugc.ShareContent": {
+                    "shareCommentary": {"text": text},
+                    "shareMediaCategory": "NONE",
+                }
+            },
+            "visibility": {
+                "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+            },
         }
 
         resp = requests.post(
-            f"{LINKEDIN_API_URL}/posts",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "X-Restli-Protocol-Version": "2.0.0",
-            },
+            f"{LINKEDIN_API_URL}/ugcPosts",
+            headers=headers,
             json=post_payload,
             timeout=30,
         )
