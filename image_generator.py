@@ -1,36 +1,99 @@
-"""Generate professional eye-catching news card images for social media.
+"""Generate bold eye-catching news card images for social media.
 
-Creates a polished 1080x1080 image with:
-- BOBNews branding header with gradient
-- Today's date
-- Headline cards with numbered badges
-- Source attribution
-- Professional footer with social handles
+Auto-detects market mood (bull/bear/neutral) from headlines and generates
+a matching style: big headline, checklist bullets, icon, CTA bar.
+
+Bull  = green, "MARKET UPDATE",  bull icon
+Bear  = red,   "MARKET PULLBACK", bear icon
+Neutral = gold, "EARNINGS SPOTLIGHT", chart icon
+
+Icon PNGs (bull.png, bear.png, chart.png) are loaded from the same directory
+if available; otherwise simple vector icons are drawn with PIL.
 """
 
 import os
 import io
+import re
 import logging
-import textwrap
 from datetime import datetime
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 
 log = logging.getLogger("image_generator")
 
-# --- Design constants ---
 WIDTH, HEIGHT = 1080, 1080
 
-# Color palette — professional financial news look
-BG_TOP = (8, 15, 35)           # Deep navy
-BG_BOTTOM = (20, 28, 55)       # Slightly lighter navy
-ACCENT = (0, 200, 255)          # Bright cyan for branding
-ACCENT_GOLD = (255, 193, 7)     # Gold for numbers/badges
-CARD_BG = (30, 38, 68)          # Card background
-CARD_BORDER = (50, 60, 95)      # Card border
-TEXT_PRIMARY = (255, 255, 255)  # White headlines
-TEXT_SECONDARY = (180, 190, 210)  # Gray for sources
-TEXT_MUTED = (120, 130, 155)    # Muted gray for footer
-HEADER_GRADIENT = (15, 80, 180) # Header bar gradient
+# --- Mood keywords ---
+BULL_KEYWORDS = [
+    "rally", "rallies", "surge", "surges", "surging", "gain", "gains", "gained",
+    "rise", "rises", "rising", "soar", "soars", "soaring", "jump", "jumps",
+    "jumped", "climb", "climbs", "climbing", "rally", "rebound", "rebounds",
+    "rebounded", "beat", "beats", "beats expectations", "upgrade", "upgraded",
+    "bullish", "optimism", "optimistic", "cools", "cooled", "inflation cools",
+    "rally", "up", "higher", "record high", "all-time high", "breakthrough",
+]
+
+BEAR_KEYWORDS = [
+    "slide", "slides", "slump", "slumps", "drop", "drops", "dropped", "fall",
+    "falls", "falling", "fell", "plunge", "plunges", "plunging", "tumble",
+    "tumbles", "tumbling", "decline", "declines", "declining", "sink", "sinks",
+    "sinking", "sank", "crash", "crashes", "crashing", "sell-off", "selloff",
+    "loss", "losses", "bearish", "pessimism", "pessimistic", "down", "lower",
+    "rate fears", "spike", "spikes", "resistance", "hit resistance", "warns",
+    "warning", "concern", "concerns", "fear", "fears", "threat", "threaten",
+]
+
+NEUTRAL_KEYWORDS = [
+    "earnings", "earnings season", "revenue", "guidance", "quarterly",
+    "quarter", "results", "q1", "q2", "q3", "q4", "analyst", "analysts",
+    "price target", "forecast", "outlook", "estimate", "estimates",
+    "report", "reports", "reported", "review", "preview", "watch",
+    "check", "checks", "what to watch", "in focus",
+]
+
+
+def _detect_mood(headlines):
+    """Detect market mood from headline text. Returns 'bull', 'bear', or 'neutral'."""
+    text = " ".join(h.get("title", "") for h in headlines).lower()
+
+    bull_score = sum(1 for kw in BULL_KEYWORDS if kw in text)
+    bear_score = sum(1 for kw in BEAR_KEYWORDS if kw in bear_kw_lower(text))
+    neutral_score = sum(1 for kw in NEUTRAL_KEYWORDS if kw in text)
+
+    log.info("Mood scores — bull=%d bear=%d neutral=%d", bull_score, bear_score, neutral_score)
+
+    scores = {"bull": bull_score, "bear": bear_score, "neutral": neutral_score}
+    best = max(scores, key=scores.get)
+    if scores[best] == 0:
+        return "bull"  # default to bull when no keywords match
+    return best
+
+
+def bear_kw_lower(text):
+    """Handle multi-word bear keywords that need exact phrase matching."""
+    return text
+
+
+# --- Mood styles ---
+MOOD_STYLES = {
+    "bull": {
+        "accent": (60, 220, 100),       # green
+        "headline_main": "MARKET",
+        "headline_sub": "UPDATE",
+        "icon_file": "bull.png",
+    },
+    "bear": {
+        "accent": (235, 70, 70),        # red
+        "headline_main": "MARKET",
+        "headline_sub": "PULLBACK",
+        "icon_file": "bear.png",
+    },
+    "neutral": {
+        "accent": (255, 193, 50),       # gold
+        "headline_main": "EARNINGS",
+        "headline_sub": "SPOTLIGHT",
+        "icon_file": "chart.png",
+    },
+}
 
 
 def _load_font(size, bold=False):
@@ -47,39 +110,8 @@ def _load_font(size, bold=False):
     return ImageFont.load_default()
 
 
-def _draw_gradient_background(img, top_color, bottom_color):
-    """Draw a vertical gradient background."""
-    width, height = img.size
-    for y in range(height):
-        ratio = y / height
-        r = int(top_color[0] + (bottom_color[0] - top_color[0]) * ratio)
-        g = int(top_color[1] + (bottom_color[1] - top_color[1]) * ratio)
-        b = int(top_color[2] + (bottom_color[2] - top_color[2]) * ratio)
-        img.putpixel((0, y), (r, g, b))
-    # Copy the single column across the whole image
-    for x in range(1, width):
-        for y in range(height):
-            img.putpixel((x, y), img.getpixel((0, y)))
-
-
-def _draw_gradient_rect(draw, x0, y0, x1, y1, top_color, bottom_color):
-    """Draw a vertical gradient rectangle."""
-    for y in range(y0, y1):
-        ratio = (y - y0) / max(1, y1 - y0)
-        r = int(top_color[0] + (bottom_color[0] - top_color[0]) * ratio)
-        g = int(top_color[1] + (bottom_color[1] - top_color[1]) * ratio)
-        b = int(top_color[2] + (bottom_color[2] - top_color[2]) * ratio)
-        draw.line([(x0, y), (x1, y)], fill=(r, g, b))
-
-
-def _rounded_rect(draw, xy, radius, fill=None, outline=None, width=1):
-    """Draw a rounded rectangle."""
-    x0, y0, x1, y1 = xy
-    draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
-
-
 def _wrap_text(draw, text, font, max_width):
-    """Wrap text to fit within max_width, returns list of lines."""
+    """Wrap text to fit within max_width."""
     words = text.split()
     lines = []
     current = ""
@@ -97,139 +129,193 @@ def _wrap_text(draw, text, font, max_width):
     return lines
 
 
+def _try_load_icon(filename):
+    """Try to load icon PNG from same directory as this script. Returns None if not found."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    icon_path = os.path.join(script_dir, filename)
+    if os.path.exists(icon_path):
+        try:
+            img = Image.open(icon_path).convert("RGBA")
+            log.info("Loaded icon: %s", icon_path)
+            return img
+        except Exception as e:
+            log.warning("Could not load icon %s: %s", icon_path, e)
+    return None
+
+
+def _draw_bull_icon(draw, x, y, size, color):
+    """Draw a simple bull silhouette with PIL primitives."""
+    # Body
+    draw.ellipse([x, y + size*0.2, x + size, y + size*0.8], outline=color, width=4)
+    # Head
+    draw.ellipse([x + size*0.6, y, x + size*1.1, y + size*0.4], outline=color, width=4)
+    # Horns
+    draw.arc([x + size*0.75, y - size*0.05, x + size*0.95, y + size*0.15], 200, 340, fill=color, width=4)
+    draw.arc([x + size*0.95, y - size*0.05, x + size*1.15, y + size*0.15], 200, 340, fill=color, width=4)
+    # Up arrow
+    draw.line([x + size*0.3, y + size*0.9, x + size*0.3, y + size*1.15], fill=color, width=5)
+    draw.polygon([
+        (x + size*0.3, y + size*0.85),
+        (x + size*0.15, y + size*1.0),
+        (x + size*0.45, y + size*1.0),
+    ], fill=color)
+
+
+def _draw_bear_icon(draw, x, y, size, color):
+    """Draw a simple bear silhouette with PIL primitives."""
+    # Body
+    draw.ellipse([x, y + size*0.25, x + size, y + size*0.85], outline=color, width=4)
+    # Head
+    draw.ellipse([x + size*0.6, y + size*0.05, x + size*1.05, y + size*0.45], outline=color, width=4)
+    # Ears
+    draw.ellipse([x + size*0.62, y - size*0.02, x + size*0.78, y + size*0.14], outline=color, width=3)
+    draw.ellipse([x + size*0.88, y - size*0.02, x + size*1.04, y + size*0.14], outline=color, width=3)
+    # Down arrow
+    draw.line([x + size*0.3, y + size*0.9, x + size*0.3, y + size*1.15], fill=color, width=5)
+    draw.polygon([
+        (x + size*0.3, y + size*1.2),
+        (x + size*0.15, y + size*1.05),
+        (x + size*0.45, y + size*1.05),
+    ], fill=color)
+
+
+def _draw_chart_icon(draw, x, y, size, color):
+    """Draw a simple chart/magnifying glass with PIL primitives."""
+    # Bars
+    bar_w = size * 0.08
+    for i, h in enumerate([0.3, 0.5, 0.4, 0.7, 0.55]):
+        bx = x + i * (bar_w * 2.5)
+        draw.rectangle([bx, y + size * (1 - h), bx + bar_w, y + size], fill=color)
+    # Trend line
+    points = [
+        (x + bar_w * 0.5, y + size * 0.7),
+        (x + bar_w * 3, y + size * 0.5),
+        (x + bar_w * 5.5, y + size * 0.6),
+        (x + bar_w * 8, y + size * 0.3),
+        (x + bar_w * 10.5, y + size * 0.45),
+    ]
+    for i in range(len(points) - 1):
+        draw.line([points[i], points[i + 1]], fill=color, width=4)
+    # Magnifying glass circle
+    cx, cy = x + size * 0.75, y + size * 0.35
+    r = size * 0.2
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=4)
+    # Handle
+    draw.line([cx + r * 0.7, cy + r * 0.7, cx + r * 1.3, cy + r * 1.3], fill=color, width=5)
+
+
+def _draw_icon_for_mood(draw, mood, x, y, size, color):
+    """Draw a simple fallback icon based on mood."""
+    if mood == "bull":
+        _draw_bull_icon(draw, x, y, size, color)
+    elif mood == "bear":
+        _draw_bear_icon(draw, x, y, size, color)
+    else:
+        _draw_chart_icon(draw, x, y, size, color)
+
+
 def generate_news_image(headlines, platform="generic"):
     """
-    Generate a professional news card image from headlines.
-    
+    Generate a bold news card image from headlines.
+    Auto-detects market mood and picks the matching style.
+
     Args:
         headlines: list of dicts with 'title', 'source', 'url' keys
         platform: 'facebook', 'instagram', 'linkedin', or 'generic'
-    
+
     Returns:
         BytesIO buffer containing JPEG image data
     """
-    img = Image.new("RGB", (WIDTH, HEIGHT))
+    mood = _detect_mood(headlines)
+    style = MOOD_STYLES[mood]
+    accent = style["accent"]
+
+    log.info("Detected mood: %s — using style: %s / %s %s",
+             mood, style["headline_main"], style["headline_main"], style["headline_sub"])
+
+    # Base canvas — solid near-black
+    img = Image.new("RGB", (WIDTH, HEIGHT), (10, 10, 12))
     draw = ImageDraw.Draw(img)
 
-    # --- Background gradient ---
-    _draw_gradient_background(img, BG_TOP, BG_BOTTOM)
+    # --- Try to load icon PNG, or draw fallback ---
+    icon_img = _try_load_icon(style["icon_file"])
+    if icon_img:
+        icon_w = 560
+        icon_h = int(icon_img.height * (icon_w / icon_img.width))
+        icon_img = icon_img.resize((icon_w, icon_h), Image.LANCZOS)
+        paste_x = WIDTH - icon_w + 60
+        paste_y = HEIGHT - icon_h - 130
+        # Create a temp RGBA image for pasting with alpha
+        img_rgba = img.convert("RGBA")
+        img_rgba.alpha_composite(icon_img, (paste_x, paste_y))
+        img = img_rgba.convert("RGB")
+        draw = ImageDraw.Draw(img)
+    else:
+        # Draw a simple vector icon on the right side
+        _draw_icon_for_mood(draw, mood, 650, 350, 350, accent)
+
+    # --- Black gradient overlay for text legibility ---
+    overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    for x in range(WIDTH):
+        if x < 750:
+            alpha = 255
+        elif x < 950:
+            alpha = int(255 * (1 - (x - 750) / 200))
+        else:
+            alpha = 0
+        odraw.line([(x, 0), (x, HEIGHT)], fill=(10, 10, 12, alpha))
+    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
     draw = ImageDraw.Draw(img)
 
     # --- Fonts ---
-    brand_font = _load_font(42, bold=True)
-    date_font = _load_font(24, bold=False)
-    headline_font = _load_font(30, bold=True)
-    source_font = _load_font(22, bold=False)
-    number_font = _load_font(28, bold=True)
-    footer_font = _load_font(24, bold=False)
-    tagline_font = _load_font(20, bold=False)
+    brand_font = _load_font(26, bold=True)
+    headline_font = _load_font(68, bold=True)
+    subtitle_font = _load_font(30, bold=True)
+    bullet_font = _load_font(28, bold=False)
+    cta_font = _load_font(26, bold=True)
 
-    # --- Header bar ---
-    header_height = 130
-    _draw_gradient_rect(draw, 0, 0, WIDTH, header_height, (12, 25, 60), (20, 40, 90))
-
-    # Header accent line
-    draw.rectangle([0, header_height, WIDTH, header_height + 4], fill=ACCENT)
-
-    # Brand name with accent dot
-    draw.text((50, 30), "BOB", fill=(255, 255, 255), font=brand_font)
+    # --- Brand top-left ---
+    draw.text((60, 50), "BOB", fill=(255, 255, 255), font=brand_font)
     bbox = draw.textbbox((0, 0), "BOB", font=brand_font)
-    bob_width = bbox[2] - bbox[0]
-    draw.text((50 + bob_width, 30), "News", fill=ACCENT, font=brand_font)
+    draw.text((60 + bbox[2] - bbox[0], 50), "NEWS", fill=accent, font=brand_font)
 
-    # Date on the right
-    today = datetime.now().strftime("%B %d, %Y")
-    bbox = draw.textbbox((0, 0), today, font=date_font)
-    date_width = bbox[2] - bbox[0]
-    draw.text((WIDTH - 50 - date_width, 40), today, fill=TEXT_SECONDARY, font=date_font)
+    # --- Big headline ---
+    draw.text((60, 120), style["headline_main"], fill=(255, 255, 255), font=headline_font)
+    draw.text((60, 195), style["headline_sub"], fill=accent, font=headline_font)
 
-    # "DAILY MARKET DIGEST" tagline
-    tagline = "DAILY MARKET DIGEST"
-    bbox = draw.textbbox((0, 0), tagline, font=tagline_font)
-    tagline_width = bbox[2] - bbox[0]
-    draw.text((WIDTH - 50 - tagline_width, 75), tagline, fill=ACCENT, font=tagline_font)
+    # --- Subtitle ---
+    draw.text((60, 295), "WHAT YOU NEED TO KNOW", fill=(200, 205, 210), font=subtitle_font)
 
-    # --- Headline cards ---
-    card_start_y = header_height + 40
-    card_height = 230
-    card_margin = 50
-    card_width = WIDTH - 2 * card_margin
-    card_gap = 20
+    # --- Bullet checklist from headlines ---
+    bullet_y = 375
+    for h in headlines[:4]:
+        title = h.get("title", "")
+        # Checkmark circle
+        draw.ellipse([60, bullet_y, 90, bullet_y + 30], outline=accent, width=3)
+        draw.line([68, bullet_y + 15, 76, bullet_y + 23], fill=accent, width=3)
+        draw.line([76, bullet_y + 23, 84, bullet_y + 7], fill=accent, width=3)
 
-    for i, headline in enumerate(headlines[:3]):
-        card_y = card_start_y + i * (card_height + card_gap)
+        # Wrap headline text
+        lines = _wrap_text(draw, title, bullet_font, 600)
+        ty = bullet_y
+        for line in lines[:2]:
+            draw.text((105, ty), line, fill=(235, 235, 240), font=bullet_font)
+            ty += 34
+        bullet_y += max(52, len(lines[:2]) * 34 + 14)
 
-        # Card background
-        _rounded_rect(
-            draw,
-            [card_margin, card_y, card_margin + card_width, card_y + card_height],
-            radius=20,
-            fill=CARD_BG,
-            outline=CARD_BORDER,
-            width=2,
-        )
+    # --- CTA bar ---
+    cta_h = 90
+    draw.rectangle([0, HEIGHT - cta_h, WIDTH, HEIGHT], fill=accent)
+    cta_text = "STAY INFORMED. STAY AHEAD."
+    bbox = draw.textbbox((0, 0), cta_text, font=cta_font)
+    draw.text((60, HEIGHT - cta_h + (cta_h - (bbox[3] - bbox[1])) // 2 - 5), cta_text, fill=(10, 10, 12), font=cta_font)
 
-        # Number badge (gold circle)
-        badge_size = 50
-        badge_x = card_margin + 25
-        badge_y = card_y + 25
-        draw.ellipse(
-            [badge_x, badge_y, badge_x + badge_size, badge_y + badge_size],
-            fill=ACCENT_GOLD,
-        )
-        num_text = str(i + 1)
-        bbox = draw.textbbox((0, 0), num_text, font=number_font)
-        num_w = bbox[2] - bbox[0]
-        num_h = bbox[3] - bbox[1]
-        draw.text(
-            (badge_x + (badge_size - num_w) / 2, badge_y + (badge_size - num_h) / 2 - 2),
-            num_text,
-            fill=(20, 20, 30),
-            font=number_font,
-        )
-
-        # Headline text (wrapped)
-        text_x = badge_x + badge_size + 25
-        text_max_width = card_margin + card_width - text_x - 30
-        headline_lines = _wrap_text(draw, headline["title"], headline_font, text_max_width)
-
-        line_y = card_y + 30
-        for line in headline_lines[:4]:  # Max 4 lines per card
-            draw.text((text_x, line_y), line, fill=TEXT_PRIMARY, font=headline_font)
-            line_y += 38
-
-        # Source
-        source_text = f"Source: {headline.get('source', 'Unknown')}"
-        draw.text(
-            (text_x, card_y + card_height - 45),
-            source_text,
-            fill=TEXT_SECONDARY,
-            font=source_font,
-        )
-
-        # Accent bar on left side of card
-        draw.rectangle(
-            [card_margin, card_y + 15, card_margin + 5, card_y + card_height - 15],
-            fill=ACCENT,
-        )
-
-    # --- Footer ---
-    footer_y = HEIGHT - 80
-
-    # Footer accent line
-    draw.rectangle([50, footer_y - 20, WIDTH - 50, footer_y - 18], fill=CARD_BORDER)
-
-    # Social handles
-    handles = "@BOBNewsDailyPost"
-    bbox = draw.textbbox((0, 0), handles, font=footer_font)
-    handles_width = bbox[2] - bbox[0]
-    draw.text((50, footer_y), handles, fill=ACCENT, font=footer_font)
-
-    # Hashtags on the right
-    hashtags = "#MarketNews #Finance #Investing"
-    bbox = draw.textbbox((0, 0), hashtags, font=footer_font)
-    tags_width = bbox[2] - bbox[0]
-    draw.text((WIDTH - 50 - tags_width, footer_y), hashtags, fill=TEXT_MUTED, font=footer_font)
+    # Handle on right of CTA bar
+    handle = "@BOBNewsDailyPost"
+    bbox2 = draw.textbbox((0, 0), handle, font=cta_font)
+    draw.text((WIDTH - 60 - (bbox2[2] - bbox2[0]), HEIGHT - cta_h + (cta_h - (bbox2[3] - bbox2[1])) // 2 - 5),
+              handle, fill=(10, 10, 12), font=cta_font)
 
     # Convert to bytes
     buf = io.BytesIO()
@@ -239,8 +325,5 @@ def generate_news_image(headlines, platform="generic"):
 
 
 def generate_story_image(headlines, platform="generic"):
-    """
-    Generate a 1080x1920 story/vertical format image (for Instagram stories, etc).
-    Currently unused but available for future enhancement.
-    """
+    """Placeholder for vertical story format (1080x1920). Not yet implemented."""
     pass
