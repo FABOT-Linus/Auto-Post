@@ -105,13 +105,18 @@ def post_to_facebook(text, headlines=None):
         access_token = _get_access_token()
         page_id = _get_page_id()
 
+        log.info(f"Facebook access token: {'Present' if access_token else 'MISSING'}")
+        log.info(f"Facebook page ID: {page_id if page_id else 'MISSING'}")
+
         if not access_token:
             return {"success": False, "error": "Missing Facebook access token"}
         if not page_id:
             return {"success": False, "error": "Missing Facebook Page ID"}
 
         # Resolve page token
+        log.info("Resolving page token...")
         access_token = _resolve_page_token(access_token, page_id)
+        log.info(f"Page token resolved: {'Success' if access_token else 'Failed'}")
 
         # Try image post first (if headlines provided)
         if headlines:
@@ -131,6 +136,8 @@ def post_to_facebook(text, headlines=None):
                         },
                         timeout=30,
                     )
+                    log.info(f"Facebook API response status: {resp.status_code}")
+                    log.info(f"Facebook API response: {resp.text[:500]}")
                     resp.raise_for_status()
                     post_id = resp.json().get("id", "")
                     if post_id:
@@ -146,6 +153,8 @@ def post_to_facebook(text, headlines=None):
             data={"message": text, "access_token": access_token},
             timeout=30,
         )
+        log.info(f"Facebook text API response status: {resp.status_code}")
+        log.info(f"Facebook text API response: {resp.text[:500]}")
         resp.raise_for_status()
         post_id = resp.json().get("id", "")
         log.info("Posted to Facebook (text only) — post ID: %s", post_id)

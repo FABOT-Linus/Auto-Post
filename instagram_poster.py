@@ -24,6 +24,9 @@ def post_to_instagram(caption, headlines):
         access_token = os.getenv("IG_ACCESS_TOKEN") or os.getenv("FACEBOOK_ACCESS_TOKEN")
         ig_account_id = os.getenv("IG_BUSINESS_ACCOUNT_ID")
 
+        log.info(f"Instagram access token: {'Present' if access_token else 'MISSING'}")
+        log.info(f"Instagram business account ID: {ig_account_id if ig_account_id else 'MISSING'}")
+
         if not access_token:
             return {"success": False, "error": "Missing Instagram access token"}
         if not ig_account_id:
@@ -62,6 +65,8 @@ def post_to_instagram(caption, headlines):
                     },
                     timeout=30,
                 )
+                log.info(f"Instagram carousel item {i+1} API response status: {resp.status_code}")
+                log.info(f"Instagram carousel item {i+1} API response: {resp.text[:500]}")
                 resp.raise_for_status()
                 child_id = resp.json().get("id")
                 if child_id:

@@ -24,6 +24,9 @@ def post_to_linkedin(text, headlines=None):
         access_token = os.getenv("LINKEDIN_ACCESS_TOKEN")
         member_urn = os.getenv("LINKEDIN_MEMBER_URN") or os.getenv("LINKEDIN_PERSON_ID")
 
+        log.info(f"LinkedIn access token: {'Present' if access_token else 'MISSING'}")
+        log.info(f"LinkedIn member URN: {member_urn if member_urn else 'MISSING - will try to fetch'}")
+
         if not access_token:
             return {"success": False, "error": "Missing LinkedIn access token"}
 
@@ -31,6 +34,7 @@ def post_to_linkedin(text, headlines=None):
             log.info("Using LinkedIn member URN: %s", member_urn)
         else:
             # Try to get the member URN from the API
+            log.info("Fetching member URN from LinkedIn API...")
             resp = requests.get(
                 f"{LINKEDIN_API_URL}/userinfo",
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -41,6 +45,8 @@ def post_to_linkedin(text, headlines=None):
                 if sub:
                     member_urn = f"urn:li:person:{sub}"
                     log.info("Retrieved LinkedIn member URN: %s", member_urn)
+            else:
+                log.warning(f"Failed to fetch member URN: HTTP {resp.status_code}")
 
         if not member_urn:
             return {"success": False, "error": "Missing LinkedIn member URN — set LINKEDIN_MEMBER_URN"}
@@ -74,6 +80,8 @@ def post_to_linkedin(text, headlines=None):
                         },
                         timeout=30,
                     )
+                    log.info(f"LinkedIn asset registration status: {register_resp.status_code}")
+                    log.info(f"LinkedIn asset registration response: {register_resp.text[:500]}")
                     register_resp.raise_for_status()
                     upload_data = register_resp.json().get("value", {})
                     upload_urn = upload_data.get("asset", "")
@@ -129,6 +137,8 @@ def post_to_linkedin(text, headlines=None):
                         json=post_payload,
                         timeout=30,
                     )
+                    log.info(f"LinkedIn UGC post status: {resp.status_code}")
+                    log.info(f"LinkedIn UGC post response: {resp.text[:500]}")
                     resp.raise_for_status()
                     post_urn = resp.json().get("id", "")
                     log.info("Posted to LinkedIn with image — post URN: %s", post_urn)
@@ -161,6 +171,8 @@ def post_to_linkedin(text, headlines=None):
             json=post_payload,
             timeout=30,
         )
+        log.info(f"LinkedIn text-only post status: {resp.status_code}")
+        log.info(f"LinkedIn text-only post response: {resp.text[:500]}")
         resp.raise_for_status()
         post_urn = resp.json().get("id", "")
         log.info("Posted to LinkedIn (text only) — post URN: %s", post_urn)
