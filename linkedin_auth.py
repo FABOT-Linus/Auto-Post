@@ -28,7 +28,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
 
 # ─── Config ───────────────────────────────────────────────
-CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID", "86mtltu80mbph3")
+CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID")
 # CLIENT_SECRET should be set via env var or pasted at runtime
 REDIRECT_URI = "http://localhost:8080/callback"
 PORT = 8080
@@ -78,24 +78,28 @@ class CallbackHandler(BaseHTTPRequestHandler):
         pass  # silence default logging
 
 
-def build_auth_url():
+def build_auth_url(client_id=None):
+    if client_id is None:
+        client_id = CLIENT_ID
     params = {
         "response_type": "code",
-        "client_id": CLIENT_ID,
+        "client_id": client_id,
         "redirect_uri": REDIRECT_URI,
         "scope": SCOPES,
     }
     return f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
 
 
-def exchange_code(code, client_secret):
+def exchange_code(code, client_secret, client_id=None):
     """Exchange the auth code for access + refresh tokens."""
+    if client_id is None:
+        client_id = CLIENT_ID
     resp = requests.post(
         TOKEN_URL,
         data={
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": CLIENT_ID,
+            "client_id": client_id,
             "client_secret": client_secret,
             "redirect_uri": REDIRECT_URI,
         },
@@ -129,6 +133,14 @@ def main():
     print("  LinkedIn OAuth 2.0 Authorization Helper")
     print("=" * 55)
 
+    # Get client ID
+    client_id = CLIENT_ID
+    if not client_id:
+        client_id = input("\nEnter your LinkedIn Client ID: ").strip()
+    if not client_id:
+        print("❌ Client ID is required.")
+        sys.exit(1)
+
     # Get client secret
     client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
     if not client_secret:
@@ -150,7 +162,7 @@ def main():
     input("\nPress Enter when ready to open your browser...")
 
     # Open browser
-    url = build_auth_url()
+    url = build_auth_url(client_id)
     print(f"\n🌐 Opening browser to LinkedIn authorization page...")
     print(f"   (If it doesn't open, copy this URL manually:\n   {url})\n")
     webbrowser.open(url)
@@ -169,7 +181,7 @@ def main():
 
     # Exchange code for tokens
     print("🔄 Exchanging authorization code for tokens...")
-    tokens = exchange_code(server.auth_code, client_secret)
+    tokens = exchange_code(server.auth_code, client_secret, client_id)
     if not tokens:
         sys.exit(1)
 

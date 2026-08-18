@@ -45,13 +45,16 @@ def _load_font(size, bold=False):
 
 def _draw_gradient_background(img, top_color, bottom_color):
     width, height = img.size
+    # Create a more efficient gradient using PIL
+    draw = ImageDraw.Draw(img)
+    
+    # Draw gradient using lines instead of individual pixels
     for y in range(height):
         ratio = y / height
         r = int(top_color[0] + (bottom_color[0] - top_color[0]) * ratio)
         g = int(top_color[1] + (bottom_color[1] - top_color[1]) * ratio)
         b = int(top_color[2] + (bottom_color[2] - top_color[2]) * ratio)
-        for x in range(width):
-            img.putpixel((x, y), (r, g, b))
+        draw.line([(0, y), (width, y)], fill=(r, g, b))
 
 
 def _wrap_text(draw, text, font, max_width):

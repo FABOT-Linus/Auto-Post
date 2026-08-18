@@ -177,6 +177,7 @@ def _upload_image_to_public_host(image_bytes):
         data = resp.json()
         if data.get("status_code") == 200 and data.get("image", {}).get("url"):
             url = data["image"]["url"]
+            log.info("Image uploaded to freeimage.host: %s", url)
             return url
     except Exception as e:
         log.warning("freeimage.host upload failed: %s — trying fallback", e)

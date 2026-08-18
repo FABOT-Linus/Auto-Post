@@ -56,7 +56,7 @@ def _detect_mood(headlines):
     text = " ".join(h.get("title", "") for h in headlines).lower()
 
     bull_score = sum(1 for kw in BULL_KEYWORDS if kw in text)
-    bear_score = sum(1 for kw in BEAR_KEYWORDS if kw in bear_kw_lower(text))
+    bear_score = sum(1 for kw in BEAR_KEYWORDS if kw in text)
     neutral_score = sum(1 for kw in NEUTRAL_KEYWORDS if kw in text)
 
     log.info("Mood scores — bull=%d bear=%d neutral=%d", bull_score, bear_score, neutral_score)
@@ -66,11 +66,6 @@ def _detect_mood(headlines):
     if scores[best] == 0:
         return "bull"  # default to bull when no keywords match
     return best
-
-
-def bear_kw_lower(text):
-    """Handle multi-word bear keywords that need exact phrase matching."""
-    return text
 
 
 # --- Mood styles ---
@@ -231,8 +226,8 @@ def generate_news_image(headlines, platform="generic"):
     style = MOOD_STYLES[mood]
     accent = style["accent"]
 
-    log.info("Detected mood: %s — using style: %s / %s %s",
-             mood, style["headline_main"], style["headline_main"], style["headline_sub"])
+    log.info("Detected mood: %s — using style: %s / %s",
+             mood, style["headline_main"], style["headline_sub"])
 
     # Base canvas — solid near-black
     img = Image.new("RGB", (WIDTH, HEIGHT), (10, 10, 12))
@@ -243,7 +238,12 @@ def generate_news_image(headlines, platform="generic"):
     if icon_img:
         icon_w = 560
         icon_h = int(icon_img.height * (icon_w / icon_img.width))
-        icon_img = icon_img.resize((icon_w, icon_h), Image.LANCZOS)
+        # Use compatible resampling filter for different Pillow versions
+        try:
+            resampling = Image.Resampling.LANCZOS
+        except AttributeError:
+            resampling = Image.LANCZOS
+        icon_img = icon_img.resize((icon_w, icon_h), resampling)
         paste_x = WIDTH - icon_w + 60
         paste_y = HEIGHT - icon_h - 130
         # Create a temp RGBA image for pasting with alpha
