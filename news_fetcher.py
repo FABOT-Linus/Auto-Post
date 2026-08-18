@@ -28,24 +28,31 @@ FINANCIAL_KEYWORDS = [
 ]
 
 
-def fetch_top_headlines(api_key, keywords, categories, max_results=3):
-    """Fetches top financial headlines. Tries NewsAPI first, falls back to RSS."""
+def fetch_top_headlines(api_key, keywords, categories, max_results=3, exclude_titles=None):
+    """Fetches top financial headlines. Tries NewsAPI first, falls back to RSS.
+
+    `exclude_titles` is an optional set of normalized (lowercased, whitespace-
+    collapsed) titles to skip — used to stop the same story from being
+    reused across same-day runs (e.g. a 9:10am post and a 4:10pm post).
+    """
+    exclude_titles = exclude_titles or set()
+
     if api_key:
-        headlines = _fetch_from_newsapi(api_key, keywords, categories, max_results)
+        headlines = _fetch_from_newsapi(api_key, keywords, categories, max_results, exclude_titles)
         if headlines:
             return headlines
-        log.warning("NewsAPI returned no results — falling back to RSS.")
+        log.warning("NewsAPI returned no usable results — falling back to RSS.")
 
-    return _fetch_from_rss(max_results)
+    return _fetch_from_rss(max_results, exclude_titles)
 
 
-def _fetch_from_newsapi(api_key, keywords, categories, max_results):
+def _fetch_from_newsapi(api_key, keywords, categories, max_results, exclude_titles):
     """Fetch financial news from NewsAPI.org."""
     try:
         params = {
             "apiKey": api_key,
-            "pageSize": max_results * 3,  # fetch extra for filtering
-            "sortBy": "popularity",
+            "pageSize": max_results * 6,  # fetch extra so there's room after excluding recent posts
+            "sortBy": "publishedAt",  # freshest first — "popularity" tends to return the same story all day
         }
         # Use provided category or default to 'business'
         params["category"] = (categories.split(",")[0].strip() if categories else "business") or "business"
@@ -58,9 +65,16 @@ def _fetch_from_newsapi(api_key, keywords, categories, max_results):
 
         articles = data.get("articles", [])
 
-        # Filter for financial relevance
+        def _norm(t):
+            return " ".join(t.lower().split())
+
+        # Filter for financial relevance, skipping anything already posted recently
         filtered = []
         for a in articles:
+            if not a.get("title") or not a.get("url"):
+                continue
+            if _norm(a["title"]) in exclude_titles:
+                continue
             title = (a.get("title", "") + " " + a.get("description", "")).lower()
             if any(kw.lower() in title for kw in FINANCIAL_KEYWORDS):
                 filtered.append(
@@ -75,7 +89,8 @@ def _fetch_from_newsapi(api_key, keywords, categories, max_results):
             if len(filtered) >= max_results:
                 break
 
-        # If filtering removed everything, return unfiltered (still business category)
+        # If filtering removed everything, fall back to the freshest non-excluded
+        # articles (still business category) rather than an empty post.
         if not filtered:
             filtered = [
                 {
@@ -85,8 +100,9 @@ def _fetch_from_newsapi(api_key, keywords, categories, max_results):
                     "description": a.get("description", ""),
                     "published_at": a.get("publishedAt", ""),
                 }
-                for a in articles[:max_results]
-            ]
+                for a in articles
+                if a.get("title") and a.get("url") and _norm(a["title"]) not in exclude_titles
+            ][:max_results]
 
         return filtered
 
@@ -95,8 +111,9 @@ def _fetch_from_newsapi(api_key, keywords, categories, max_results):
         return []
 
 
-def _fetch_from_rss(max_results):
+def _fetch_from_rss(max_results, exclude_titles=None):
     """Fallback: fetch from financial RSS feeds (no API key needed)."""
+    exclude_titles = exclude_titles or set()
     all_entries = []
     for feed_url in RSS_FEEDS:
         try:
@@ -120,13 +137,14 @@ def _fetch_from_rss(max_results):
         except Exception as e:
             log.warning("RSS feed %s error: %s", feed_url, e)
 
-    # Deduplicate by title
+    # Deduplicate by title, and skip anything already posted recently
     seen = set()
     unique = []
     for entry in all_entries:
-        key = entry["title"].lower().strip()
-        if key not in seen:
-            seen.add(key)
-            unique.append(entry)
+        key = " ".join(entry["title"].lower().split())
+        if key in seen or key in exclude_titles:
+            continue
+        seen.add(key)
+        unique.append(entry)
 
     return unique[:max_results]

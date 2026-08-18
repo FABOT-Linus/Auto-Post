@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from news_fetcher import fetch_top_headlines
 from formatter import format_posts
+from post_history import load_recent_titles, record_posted
 
 load_dotenv(override=True)
 
@@ -34,24 +35,32 @@ def main():
     except ValueError:
         max_headlines = 3
 
+    # Don't repost the same stories a same-day run (e.g. 9:10am / 4:10pm) already used.
+    recent_titles = load_recent_titles()
+    log.info("%d headline(s) on cooldown from a recent run.", len(recent_titles))
+
     try:
         headlines = fetch_top_headlines(
             api_key=os.getenv("NEWS_API_KEY"),
             keywords=keywords,
             categories=categories,
             max_results=max_headlines,
+            exclude_titles=recent_titles,
         )
     except Exception as e:
         log.error("News fetch failed completely: %s", e)
         headlines = []
 
     if not headlines:
-        log.warning("No headlines fetched — exiting.")
+        log.warning("No fresh headlines available — exiting.")
         return
 
     log.info("Fetched %d financial headlines:", len(headlines))
     for h in headlines:
         log.info("  • %s — %s", h["title"], h["source"])
+
+    # Record these immediately so a crash mid-post doesn't cause a reuse next run.
+    record_posted(headlines)
 
     # --- Format for each platform ---
     posts = format_posts(headlines)
