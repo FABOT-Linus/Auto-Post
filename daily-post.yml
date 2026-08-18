@@ -2,10 +2,8 @@ name: Daily Financial News Post
 
 on:
   schedule:
-    # Runs at 13:40 UTC daily (adjust as needed)
-    # UTC 13:40 = 09:40 ET / 06:40 PT
     - cron: "40 13 * * *"
-  workflow_dispatch: # Allow manual trigger for testing
+  workflow_dispatch:
 
 jobs:
   post-news:
@@ -25,7 +23,6 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Daily Financial News Poster
-        id: post
         env:
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}

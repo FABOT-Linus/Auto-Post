@@ -101,7 +101,7 @@ def post_to_linkedin(text, headlines=None):
                         "lifecycleState": "PUBLISHED",
                         "specificContent": {
                             "com.linkedin.ugc.ShareContent": {
-                                "shareCommentary": {"text": text},
+                                "shareCommentary": {"value": text},
                                 "shareMediaCategory": "IMAGE",
                                 "media": [
                                     {
@@ -143,7 +143,7 @@ def post_to_linkedin(text, headlines=None):
             "lifecycleState": "PUBLISHED",
             "specificContent": {
                 "com.linkedin.ugc.ShareContent": {
-                    "shareCommentary": {"text": text},
+                    "shareCommentary": {"value": text},
                     "shareMediaCategory": "NONE",
                 }
             },
