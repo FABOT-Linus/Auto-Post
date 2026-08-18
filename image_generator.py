@@ -286,7 +286,10 @@ def generate_news_image(headlines, platform="generic"):
     draw.text((60, 195), style["headline_sub"], fill=accent, font=headline_font)
 
     # --- Subtitle ---
-    draw.text((60, 295), "WHAT YOU NEED TO KNOW", fill=(200, 205, 210), font=subtitle_font)
+    # Use POST_IMAGE_SUBTITLE env var for morning vs afternoon label
+    import os as _os
+    _img_subtitle = _os.getenv("POST_IMAGE_SUBTITLE", "").strip() or "WHAT YOU NEED TO KNOW"
+    draw.text((60, 295), _img_subtitle.upper(), fill=(200, 205, 210), font=subtitle_font)
 
     # --- Bullet checklist from headlines ---
     bullet_y = 375
