@@ -92,15 +92,20 @@ def _generate_image_card(headlines):
     img = Image.new("RGB", (width, height), bg_color)
     draw = ImageDraw.Draw(img)
 
-    # Fonts
-    try:
-        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 42)
-        body_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
-        source_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-    except (IOError, OSError):
-        title_font = ImageFont.load_default()
-        body_font = ImageFont.load_default()
-        source_font = ImageFont.load_default()
+    # Fonts — try Linux paths first, then Windows
+    font_paths = [
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        ("C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/arial.ttf"),
+    ]
+    title_font = body_font = source_font = ImageFont.load_default()
+    for bold_path, regular_path in font_paths:
+        try:
+            title_font = ImageFont.truetype(bold_path, 42)
+            body_font = ImageFont.truetype(regular_path, 26)
+            source_font = ImageFont.truetype(regular_path, 18)
+            break
+        except (IOError, OSError):
+            continue
 
     # Header bar
     draw.rectangle([0, 0, width, 80], fill=(0, 200, 150))

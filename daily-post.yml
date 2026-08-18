@@ -25,6 +25,10 @@ jobs:
       - name: Run Daily Financial News Poster
         env:
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -53,4 +57,4 @@ jobs:
           subject: "BOBNews Daily Post - ${{ job.status }}"
           body: "file://post_output.log"
           to: ${{ secrets.EMAIL_TO }}
-          from: BOBNews Bot
+          from: "BOBNews Bot"

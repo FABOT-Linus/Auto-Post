@@ -189,7 +189,7 @@ def main():
     if userinfo:
         sub = userinfo.get("sub", "")
         name = userinfo.get("name", "")
-        print(f"\n  LINKEDIN_PERSON_ID=urn:li:person:{sub}")
+        print(f"\n  LINKEDIN_MEMBER_URN=urn:li:person:{sub}")
         if name:
             print(f"  (Authenticated as: {name})")
 
@@ -200,7 +200,7 @@ def main():
     if refresh_token:
         print(f"  LINKEDIN_REFRESH_TOKEN={refresh_token}")
     if userinfo and userinfo.get("sub"):
-        print(f"  LINKEDIN_PERSON_ID=urn:li:person:{userinfo['sub']}")
+        print(f"  LINKEDIN_MEMBER_URN=urn:li:person:{userinfo['sub']}")
     print("=" * 55)
 
     # Also offer to save directly to .env
@@ -214,13 +214,13 @@ def main():
             })
             if userinfo and userinfo.get("sub"):
                 update_env_file(env_path, {
-                    "LINKEDIN_PERSON_ID": f"urn:li:person:{userinfo['sub']}",
+                    "LINKEDIN_MEMBER_URN": f"urn:li:person:{userinfo['sub']}",
                 })
             print(f"✅ Saved to {env_path}")
         else:
             print("👌 No problem — copy them manually into your .env file.")
 
-    print("\n🎉 You're all set! You can now run: python src/main.py")
+    print("\n🎉 You're all set! You can now run: python main.py")
 
 
 def update_env_file(path, updates):

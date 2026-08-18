@@ -93,6 +93,9 @@ def post_to_instagram(caption, headlines):
                 log.info("Posted single image to Instagram — media ID: %s", media_id)
                 return {"success": True, "media_id": media_id, "carousel": False}
 
+            # Wait for Instagram to finish processing carousel items before assembling
+            time.sleep(8)
+
             # Create the carousel container
             children_param = ",".join(children_ids)
             resp = requests.post(

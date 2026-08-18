@@ -47,8 +47,8 @@ def _fetch_from_newsapi(api_key, keywords, categories, max_results):
             "pageSize": max_results * 3,  # fetch extra for filtering
             "sortBy": "popularity",
         }
-        # Use 'business' category for financial news
-        params["category"] = "business"
+        # Use provided category or default to 'business'
+        params["category"] = (categories.split(",")[0].strip() if categories else "business") or "business"
         # Use provided keywords or default to financial terms
         params["q"] = keywords.split(",")[0].strip() if keywords else "stock market"
 

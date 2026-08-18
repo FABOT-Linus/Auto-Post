@@ -33,6 +33,7 @@ def _load_font(size, bold=False):
     paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
     ]
     for p in paths:
         try:
@@ -114,22 +115,42 @@ def _slide_base(slide_num, total=5):
     return img, ImageDraw.Draw(img)
 
 
-def generate_slide_1():
-    """Slide 1: Bold hook headline."""
+def _short_hook(title, max_words=4):
+    """Extract a short hook phrase from a headline title."""
+    # Strip common prefixes and take first few meaningful words
+    clean = title.split("—")[0].split("|")[0].split(":")[0].strip()
+    words = clean.split()
+    if len(words) <= max_words:
+        return clean.upper()
+    return " ".join(words[:max_words]).upper()
+
+
+def generate_slide_1(headlines=None):
+    """Slide 1: Bold hook headline derived from top story."""
     img, draw = _slide_base(1)
 
-    # Big bold text — 3-6 words
     hook_font = _load_font(72, bold=True)
     sub_font = _load_font(36, bold=False)
 
-    lines = ["AI JUST", "REWROTE", "THE MARKETS"]
+    if headlines:
+        hook_text = _short_hook(headlines[0]["title"], max_words=5)
+        # Split into lines of ~2-3 words for visual impact
+        words = hook_text.split()
+        lines = []
+        i = 0
+        while i < len(words):
+            chunk_size = 2 if len(words) - i > 3 else len(words) - i
+            lines.append(" ".join(words[i:i + chunk_size]))
+            i += chunk_size
+        lines = lines[:3]  # max 3 lines
+    else:
+        lines = ["TODAY'S", "MARKET", "NEWS"]
 
     y = 450
     for line in lines:
         _center_text(draw, line, hook_font, y, WIDTH, ACCENT_GOLD)
         y += 90
 
-    # Subtitle
     y += 40
     _center_text(draw, "Today's market breakdown", sub_font, y, WIDTH, TEXT_GRAY)
 
@@ -144,33 +165,34 @@ def generate_slide_1():
 
 
 def generate_slide_2(headlines):
-    """Slide 2: Key stat 1 — AI infrastructure earnings."""
+    """Slide 2: First headline as key story."""
     img, draw = _slide_base(2)
 
-    stat_font = _load_font(56, bold=True)
+    stat_font = _load_font(48, bold=True)
     detail_font = _load_font(32, bold=False)
     source_font = _load_font(24)
 
-    # Big stat
-    _center_text(draw, "AI INFRA", stat_font, 300, WIDTH, ACCENT_GREEN)
+    h = headlines[0] if headlines else {"title": "Market Update", "source": "Financial News"}
+    title = h.get("title", "Market Update")
+    source = h.get("source", "Financial News")
 
-    _center_text(draw, "SURGES", stat_font, 370, WIDTH, ACCENT_GREEN)
+    # Big headline (wrapped)
+    y = 280
+    lines = _wrap_text(draw, title.upper(), stat_font, WIDTH - 100)
+    for line in lines[:3]:
+        _center_text(draw, line, stat_font, y, WIDTH, ACCENT_GREEN)
+        y += 60
 
-    # Detail
-    y = 500
-    lines = _wrap_text(draw, "CoreWeave & Supermicro earnings beat expectations", detail_font, WIDTH - 120)
-    for line in lines:
-        _center_text(draw, line, detail_font, y, WIDTH, TEXT_WHITE)
-        y += 45
+    # Description if available
+    desc = h.get("description", "")
+    if desc:
+        y += 30
+        desc_lines = _wrap_text(draw, desc, detail_font, WIDTH - 120)
+        for line in desc_lines[:3]:
+            _center_text(draw, line, detail_font, y, WIDTH, TEXT_WHITE)
+            y += 45
 
-    y += 30
-    lines = _wrap_text(draw, "→ AI infrastructure stocks jumping on real revenue", detail_font, WIDTH - 120)
-    for line in lines:
-        _center_text(draw, line, detail_font, y, WIDTH, TEXT_GRAY)
-        y += 45
-
-    # Source
-    _center_text(draw, "Source: Yahoo Finance", source_font, HEIGHT - 130, WIDTH, TEXT_MUTED)
+    _center_text(draw, f"Source: {source}", source_font, HEIGHT - 130, WIDTH, TEXT_MUTED)
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=92)
@@ -179,33 +201,32 @@ def generate_slide_2(headlines):
 
 
 def generate_slide_3(headlines):
-    """Slide 3: Key stat 2 — Goldman Sachs acquisition."""
+    """Slide 3: Second headline as key story."""
     img, draw = _slide_base(3)
 
-    stat_font = _load_font(56, bold=True)
+    stat_font = _load_font(48, bold=True)
     detail_font = _load_font(32, bold=False)
     source_font = _load_font(24)
 
-    # Big stat
-    _center_text(draw, "$2.3 BILLION", stat_font, 300, WIDTH, ACCENT_GOLD)
+    h = headlines[1] if len(headlines) > 1 else (headlines[0] if headlines else {"title": "Market Update", "source": "Financial News"})
+    title = h.get("title", "Market Update")
+    source = h.get("source", "Financial News")
 
-    _center_text(draw, "ACQUISITION", stat_font, 370, WIDTH, ACCENT_GOLD)
+    y = 280
+    lines = _wrap_text(draw, title.upper(), stat_font, WIDTH - 100)
+    for line in lines[:3]:
+        _center_text(draw, line, stat_font, y, WIDTH, ACCENT_GOLD)
+        y += 60
 
-    # Detail
-    y = 500
-    lines = _wrap_text(draw, "Goldman Sachs to buy ETF provider Neos", detail_font, WIDTH - 120)
-    for line in lines:
-        _center_text(draw, line, detail_font, y, WIDTH, TEXT_WHITE)
-        y += 45
+    desc = h.get("description", "")
+    if desc:
+        y += 30
+        desc_lines = _wrap_text(draw, desc, detail_font, WIDTH - 120)
+        for line in desc_lines[:3]:
+            _center_text(draw, line, detail_font, y, WIDTH, TEXT_WHITE)
+            y += 45
 
-    y += 30
-    lines = _wrap_text(draw, "→ Major bet on structured products space", detail_font, WIDTH - 120)
-    for line in lines:
-        _center_text(draw, line, detail_font, y, WIDTH, TEXT_GRAY)
-        y += 45
-
-    # Source
-    _center_text(draw, "Source: Yahoo Finance", source_font, HEIGHT - 130, WIDTH, TEXT_MUTED)
+    _center_text(draw, f"Source: {source}", source_font, HEIGHT - 130, WIDTH, TEXT_MUTED)
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=92)
@@ -213,8 +234,8 @@ def generate_slide_3(headlines):
     return buf
 
 
-def generate_slide_4():
-    """Slide 4: The Impact."""
+def generate_slide_4(headlines=None):
+    """Slide 4: The Impact — summary of today's headlines."""
     img, draw = _slide_base(4)
 
     title_font = _load_font(48, bold=True)
@@ -223,32 +244,28 @@ def generate_slide_4():
 
     _center_text(draw, "THE IMPACT", title_font, 280, WIDTH, ACCENT)
 
-    y = 400
-    lines = _wrap_text(draw, "Cooling inflation + AI earnings", body_font, WIDTH - 120)
-    for line in lines:
-        _center_text(draw, line, body_font, y, WIDTH, TEXT_WHITE)
-        y += 50
+    y = 380
+    if headlines:
+        for h in headlines[:3]:
+            title = h.get("title", "")
+            if len(title) > 70:
+                title = title[:67] + "..."
+            lines = _wrap_text(draw, f"• {title}", body_font, WIDTH - 120)
+            for line in lines:
+                _center_text(draw, line, body_font, y, WIDTH, TEXT_WHITE)
+                y += 45
+            y += 10
+    else:
+        lines = _wrap_text(draw, "Stay informed on today's market moves", body_font, WIDTH - 120)
+        for line in lines:
+            _center_text(draw, line, body_font, y, WIDTH, TEXT_WHITE)
+            y += 50
 
     y += 20
-    _center_text(draw, "=", highlight_font, y, WIDTH, ACCENT_GOLD)
-    y += 60
-
-    lines = _wrap_text(draw, "Fed likely holds rates", highlight_font, WIDTH - 120)
+    lines = _wrap_text(draw, "What does this mean for your portfolio?", highlight_font, WIDTH - 120)
     for line in lines:
-        _center_text(draw, line, highlight_font, y, WIDTH, ACCENT_GREEN)
+        _center_text(draw, line, highlight_font, y, WIDTH, ACCENT_GOLD)
         y += 50
-
-    y += 30
-    lines = _wrap_text(draw, "Markets have room to run", body_font, WIDTH - 120)
-    for line in lines:
-        _center_text(draw, line, body_font, y, WIDTH, TEXT_WHITE)
-        y += 45
-
-    y += 10
-    lines = _wrap_text(draw, "— but for how long?", body_font, WIDTH - 120)
-    for line in lines:
-        _center_text(draw, line, body_font, y, WIDTH, TEXT_GRAY)
-        y += 45
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=92)
@@ -288,10 +305,10 @@ def generate_slide_5():
 def generate_all_slides(headlines):
     """Generate all 5 carousel slides. Returns list of BytesIO buffers."""
     return [
-        generate_slide_1(),
+        generate_slide_1(headlines),
         generate_slide_2(headlines),
         generate_slide_3(headlines),
-        generate_slide_4(),
+        generate_slide_4(headlines),
         generate_slide_5(),
     ]
 

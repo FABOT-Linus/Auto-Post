@@ -22,7 +22,7 @@ def post_to_linkedin(text, headlines=None):
     Returns dict with success/status."""
     try:
         access_token = os.getenv("LINKEDIN_ACCESS_TOKEN")
-        member_urn = os.getenv("LINKEDIN_MEMBER_URN")
+        member_urn = os.getenv("LINKEDIN_MEMBER_URN") or os.getenv("LINKEDIN_PERSON_ID")
 
         if not access_token:
             return {"success": False, "error": "Missing LinkedIn access token"}
