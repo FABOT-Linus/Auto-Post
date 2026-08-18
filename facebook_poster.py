@@ -1,6 +1,7 @@
 """Post to a Facebook Page via the Graph API.
 
 Posts an image (news card) with a text caption for maximum engagement.
+Uploads image as binary data directly to Facebook (NOT via external hosting).
 Falls back to text-only if image generation/upload fails.
 """
 
@@ -45,68 +46,14 @@ def _resolve_page_token(access_token, page_id):
     return access_token
 
 
-def _upload_image_to_public_host(image_bytes):
-    """Upload image to freeimage.host and return the direct URL."""
-    import base64
-    try:
-        image_bytes.seek(0)
-        b64 = base64.b64encode(image_bytes.getvalue()).decode()
-        resp = requests.post(
-            "https://freeimage.host/api/1/upload",
-            data={
-                "key": "6d207e02198a847aa98d0a2a901485a5",
-                "action": "upload",
-                "source": b64,
-                "type": "file",
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("status_code") == 200 and data.get("image", {}).get("url"):
-            url = data["image"]["url"]
-            log.info("Image uploaded to freeimage.host: %s", url)
-            return url
-        else:
-            log.warning("freeimage.host returned unexpected response: %s", data)
-    except Exception as e:
-        log.warning("freeimage.host upload failed: %s", e)
-    
-    # Fallback: Try imgbb.com
-    try:
-        image_bytes.seek(0)
-        b64 = base64.b64encode(image_bytes.getvalue()).decode()
-        resp = requests.post(
-            "https://api.imgbb.com/1/upload",
-            data={
-                "key": os.getenv("IMGBB_API_KEY", ""),  # You'll need to add this to your secrets
-                "image": b64,
-            },
-            timeout=30,
-        )
-        if os.getenv("IMGBB_API_KEY"):
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("success") and data.get("data", {}).get("url"):
-                url = data["data"]["url"]
-                log.info("Image uploaded to imgbb.com: %s", url)
-                return url
-    except Exception as e:
-        log.warning("imgbb.com upload also failed: %s", e)
-    
-    return None
-
-
 def post_to_facebook(text, headlines=None):
     """Posts an image card + caption to a Facebook Page.
+    Uploads image as binary directly to Facebook API (no external hosting).
     Falls back to text-only if image upload fails.
     Returns dict with success/status."""
     try:
         access_token = _get_access_token()
         page_id = _get_page_id()
-
-        log.info(f"Facebook access token: {'Present' if access_token else 'MISSING'}")
-        log.info(f"Facebook page ID: {page_id if page_id else 'MISSING'}")
 
         if not access_token:
             return {"success": False, "error": "Missing Facebook access token"}
@@ -114,35 +61,33 @@ def post_to_facebook(text, headlines=None):
             return {"success": False, "error": "Missing Facebook Page ID"}
 
         # Resolve page token
-        log.info("Resolving page token...")
         access_token = _resolve_page_token(access_token, page_id)
-        log.info(f"Page token resolved: {'Success' if access_token else 'Failed'}")
 
         # Try image post first (if headlines provided)
         if headlines:
             try:
                 image_bytes = generate_news_image(headlines, platform="facebook")
-                image_url = _upload_image_to_public_host(image_bytes)
+                image_bytes.seek(0)
 
-                if image_url:
-                    log.info("Posting image card to Facebook...")
-                    # Post photo with caption
-                    resp = requests.post(
-                        f"{FB_GRAPH_URL}/{page_id}/photos",
-                        data={
-                            "url": image_url,
-                            "message": text,
-                            "access_token": access_token,
-                        },
-                        timeout=30,
-                    )
-                    log.info(f"Facebook API response status: {resp.status_code}")
-                    log.info(f"Facebook API response: {resp.text[:500]}")
-                    resp.raise_for_status()
-                    post_id = resp.json().get("id", "")
-                    if post_id:
-                        log.info("Posted to Facebook with image — post ID: %s", post_id)
-                        return {"success": True, "post_id": post_id, "image": True}
+                log.info("Uploading image directly to Facebook (binary upload)...")
+                # Upload image as binary multipart form data — NOT via external URL
+                resp = requests.post(
+                    f"{FB_GRAPH_URL}/{page_id}/photos",
+                    data={
+                        "message": text,
+                        "access_token": access_token,
+                    },
+                    files={
+                        "source": ("news_card.png", image_bytes, "image/png"),
+                    },
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                post_id = result.get("post_id", result.get("id", ""))
+                if post_id:
+                    log.info("Posted to Facebook with image — post ID: %s", post_id)
+                    return {"success": True, "post_id": post_id, "image": True}
             except Exception as e:
                 log.warning("Image post failed, falling back to text: %s", e)
 
@@ -153,8 +98,6 @@ def post_to_facebook(text, headlines=None):
             data={"message": text, "access_token": access_token},
             timeout=30,
         )
-        log.info(f"Facebook text API response status: {resp.status_code}")
-        log.info(f"Facebook text API response: {resp.text[:500]}")
         resp.raise_for_status()
         post_id = resp.json().get("id", "")
         log.info("Posted to Facebook (text only) — post ID: %s", post_id)

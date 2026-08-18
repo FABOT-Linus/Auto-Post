@@ -24,9 +24,6 @@ def post_to_linkedin(text, headlines=None):
         access_token = os.getenv("LINKEDIN_ACCESS_TOKEN")
         member_urn = os.getenv("LINKEDIN_MEMBER_URN") or os.getenv("LINKEDIN_PERSON_ID")
 
-        log.info(f"LinkedIn access token: {'Present' if access_token else 'MISSING'}")
-        log.info(f"LinkedIn member URN: {member_urn if member_urn else 'MISSING - will try to fetch'}")
-
         if not access_token:
             return {"success": False, "error": "Missing LinkedIn access token"}
 
@@ -34,7 +31,6 @@ def post_to_linkedin(text, headlines=None):
             log.info("Using LinkedIn member URN: %s", member_urn)
         else:
             # Try to get the member URN from the API
-            log.info("Fetching member URN from LinkedIn API...")
             resp = requests.get(
                 f"{LINKEDIN_API_URL}/userinfo",
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -45,8 +41,6 @@ def post_to_linkedin(text, headlines=None):
                 if sub:
                     member_urn = f"urn:li:person:{sub}"
                     log.info("Retrieved LinkedIn member URN: %s", member_urn)
-            else:
-                log.warning(f"Failed to fetch member URN: HTTP {resp.status_code}")
 
         if not member_urn:
             return {"success": False, "error": "Missing LinkedIn member URN — set LINKEDIN_MEMBER_URN"}
@@ -61,7 +55,6 @@ def post_to_linkedin(text, headlines=None):
         }
 
         # Try image post first (if headlines provided)
-        image_post_success = False
         if headlines:
             try:
                 image_url = _upload_image_to_public_host(headlines)
@@ -80,8 +73,6 @@ def post_to_linkedin(text, headlines=None):
                         },
                         timeout=30,
                     )
-                    log.info(f"LinkedIn asset registration status: {register_resp.status_code}")
-                    log.info(f"LinkedIn asset registration response: {register_resp.text[:500]}")
                     register_resp.raise_for_status()
                     upload_data = register_resp.json().get("value", {})
                     upload_urn = upload_data.get("asset", "")
@@ -137,17 +128,13 @@ def post_to_linkedin(text, headlines=None):
                         json=post_payload,
                         timeout=30,
                     )
-                    log.info(f"LinkedIn UGC post status: {resp.status_code}")
-                    log.info(f"LinkedIn UGC post response: {resp.text[:500]}")
                     resp.raise_for_status()
                     post_urn = resp.json().get("id", "")
                     log.info("Posted to LinkedIn with image — post URN: %s", post_urn)
                     return {"success": True, "post_urn": post_urn, "image": True}
-                else:
-                    log.warning("Image upload failed, will try text-only post")
 
             except Exception as e:
-                log.warning("LinkedIn image post failed, will try text-only: %s", e)
+                log.warning("LinkedIn image post failed, falling back to text: %s", e)
 
         # Fallback: Text-only post via v2 UGC API
         log.info("Posting text-only to LinkedIn as: %s", author)
@@ -171,8 +158,6 @@ def post_to_linkedin(text, headlines=None):
             json=post_payload,
             timeout=30,
         )
-        log.info(f"LinkedIn text-only post status: {resp.status_code}")
-        log.info(f"LinkedIn text-only post response: {resp.text[:500]}")
         resp.raise_for_status()
         post_urn = resp.json().get("id", "")
         log.info("Posted to LinkedIn (text only) — post URN: %s", post_urn)
@@ -184,7 +169,7 @@ def post_to_linkedin(text, headlines=None):
 
 
 def _upload_image_to_public_host(headlines):
-    """Generate image and upload to freeimage.host with fallback options."""
+    """Generate image and upload to freeimage.host."""
     import base64
     try:
         image_bytes = generate_news_image(headlines, platform="linkedin")
@@ -205,31 +190,6 @@ def _upload_image_to_public_host(headlines):
             url = data["image"]["url"]
             log.info("Image uploaded to freeimage.host: %s", url)
             return url
-        else:
-            log.warning("freeimage.host returned unexpected response: %s", data)
     except Exception as e:
-        log.warning("freeimage.host upload failed: %s", e)
-    
-    # Fallback: Try imgbb.com
-    try:
-        image_bytes = generate_news_image(headlines, platform="linkedin")
-        b64 = base64.b64encode(image_bytes.getvalue()).decode()
-        resp = requests.post(
-            "https://api.imgbb.com/1/upload",
-            data={
-                "key": os.getenv("IMGBB_API_KEY", ""),
-                "image": b64,
-            },
-            timeout=30,
-        )
-        if os.getenv("IMGBB_API_KEY"):
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("success") and data.get("data", {}).get("url"):
-                url = data["data"]["url"]
-                log.info("Image uploaded to imgbb.com: %s", url)
-                return url
-    except Exception as e:
-        log.warning("imgbb.com upload also failed: %s", e)
-    
+        log.warning("Image upload failed: %s", e)
     return None

@@ -24,9 +24,6 @@ def post_to_instagram(caption, headlines):
         access_token = os.getenv("IG_ACCESS_TOKEN") or os.getenv("FACEBOOK_ACCESS_TOKEN")
         ig_account_id = os.getenv("IG_BUSINESS_ACCOUNT_ID")
 
-        log.info(f"Instagram access token: {'Present' if access_token else 'MISSING'}")
-        log.info(f"Instagram business account ID: {ig_account_id if ig_account_id else 'MISSING'}")
-
         if not access_token:
             return {"success": False, "error": "Missing Instagram access token"}
         if not ig_account_id:
@@ -65,8 +62,6 @@ def post_to_instagram(caption, headlines):
                     },
                     timeout=30,
                 )
-                log.info(f"Instagram carousel item {i+1} API response status: {resp.status_code}")
-                log.info(f"Instagram carousel item {i+1} API response: {resp.text[:500]}")
                 resp.raise_for_status()
                 child_id = resp.json().get("id")
                 if child_id:
@@ -163,7 +158,7 @@ def post_to_instagram(caption, headlines):
 
 
 def _upload_image_to_public_host(image_bytes):
-    """Upload image to freeimage.host with fallback options and return the direct URL."""
+    """Upload image to freeimage.host and return the direct URL."""
     import base64
     try:
         image_bytes.seek(0)
@@ -184,34 +179,10 @@ def _upload_image_to_public_host(image_bytes):
             url = data["image"]["url"]
             log.info("Image uploaded to freeimage.host: %s", url)
             return url
-        else:
-            log.warning("freeimage.host returned unexpected response: %s", data)
     except Exception as e:
         log.warning("freeimage.host upload failed: %s — trying fallback", e)
 
-    # Fallback: Try imgbb.com
-    try:
-        image_bytes.seek(0)
-        b64 = base64.b64encode(image_bytes.getvalue()).decode()
-        resp = requests.post(
-            "https://api.imgbb.com/1/upload",
-            data={
-                "key": os.getenv("IMGBB_API_KEY", ""),
-                "image": b64,
-            },
-            timeout=30,
-        )
-        if os.getenv("IMGBB_API_KEY"):
-            resp.raise_for_status()
-            data = resp.json()
-            if data.get("success") and data.get("data", {}).get("url"):
-                url = data["data"]["url"]
-                log.info("Image uploaded to imgbb.com: %s", url)
-                return url
-    except Exception as e:
-        log.warning("imgbb.com upload failed: %s — trying next fallback", e)
-
-    # Final fallback: 0x0.st
+    # Fallback: 0x0.st
     try:
         image_bytes.seek(0)
         resp = requests.post(
@@ -222,7 +193,6 @@ def _upload_image_to_public_host(image_bytes):
         resp.raise_for_status()
         url = resp.text.strip()
         if url:
-            log.info("Image uploaded to 0x0.st: %s", url)
             return url
     except Exception as e:
         log.error("0x0.st upload also failed: %s", e)
