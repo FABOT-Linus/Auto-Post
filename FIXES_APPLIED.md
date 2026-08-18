@@ -1,6 +1,67 @@
 # Fixes Applied to Auto-Post Code
 
-## Issues Found and Fixed
+## Additional Debugging Fixes (v2)
+
+### 12. Image Hosting Reliability Issues
+**Issue**: The code relied on a single image hosting service (freeimage.host) with a hardcoded API key that may be unreliable or rate-limited
+**Fix**: Added multiple fallback options for image hosting:
+- Primary: freeimage.host (existing)
+- Fallback 1: imgbb.com (requires IMGBB_API_KEY secret)
+- Fallback 2: 0x0.st (no API key needed)
+**Impact**: Much more reliable image posting - if one service fails, others are tried automatically
+
+### 13. Enhanced Error Logging
+**Issue**: Limited error information made debugging difficult
+**Fix**: Added detailed error logging for:
+- Unexpected API responses from image hosting services
+- Specific failure points in the posting pipeline
+- Better success/failure messages
+**Impact**: Easier to identify and fix posting issues
+
+### 14. Test Script Added
+**Issue**: No easy way to test individual platforms
+**Fix**: Created `test_posting.py` script that:
+- Tests each platform (Facebook, Instagram, LinkedIn) individually
+- Provides detailed debug output for each step
+- Shows which credentials are missing or invalid
+- Gives clear pass/fail status for each platform
+**Impact**: Much easier to debug configuration issues
+
+## How to Use the Updated Code
+
+### 1. Update Your GitHub Secrets
+Add this optional secret for better image hosting reliability:
+- `IMGBB_API_KEY`: Get a free API key from https://imgbb.com/ (optional but recommended)
+
+### 2. Test Locally First
+Run the test script to check your configuration:
+```bash
+cd 97c58952d_Auto-Post-FIXED
+python test_posting.py
+```
+
+This will tell you exactly which credentials are missing or which platforms are failing.
+
+### 3. Check GitHub Actions Logs
+Look for these specific log messages:
+- "Image uploaded to freeimage.host/imgbb.com/0x0.st" - indicates image hosting worked
+- "Posting to Facebook/Instagram/LinkedIn" - indicates the platform is being attempted
+- Error messages that show exactly where the posting failed
+
+### 4. Common Issues and Solutions
+
+**If posts aren't appearing:**
+1. Check that your access tokens are valid and not expired
+2. Verify your Page IDs and Business Account IDs are correct
+3. Make sure your API permissions include posting rights
+4. Check the GitHub Actions logs for specific error messages
+
+**If image hosting fails:**
+1. Add `IMGBB_API_KEY` to your GitHub Secrets
+2. The code will automatically fall back to alternative services
+3. As a last resort, it will try text-only posts
+
+## Issues Found and Fixed (Original)
 
 ### 1. image_generator.py - Line 59
 **Issue**: Function call error - `bear_kw_lower(text)` was called but the function was unnecessary

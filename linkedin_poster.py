@@ -55,6 +55,7 @@ def post_to_linkedin(text, headlines=None):
         }
 
         # Try image post first (if headlines provided)
+        image_post_success = False
         if headlines:
             try:
                 image_url = _upload_image_to_public_host(headlines)
@@ -132,9 +133,11 @@ def post_to_linkedin(text, headlines=None):
                     post_urn = resp.json().get("id", "")
                     log.info("Posted to LinkedIn with image — post URN: %s", post_urn)
                     return {"success": True, "post_urn": post_urn, "image": True}
+                else:
+                    log.warning("Image upload failed, will try text-only post")
 
             except Exception as e:
-                log.warning("LinkedIn image post failed, falling back to text: %s", e)
+                log.warning("LinkedIn image post failed, will try text-only: %s", e)
 
         # Fallback: Text-only post via v2 UGC API
         log.info("Posting text-only to LinkedIn as: %s", author)
@@ -169,7 +172,7 @@ def post_to_linkedin(text, headlines=None):
 
 
 def _upload_image_to_public_host(headlines):
-    """Generate image and upload to freeimage.host."""
+    """Generate image and upload to freeimage.host with fallback options."""
     import base64
     try:
         image_bytes = generate_news_image(headlines, platform="linkedin")
@@ -190,6 +193,31 @@ def _upload_image_to_public_host(headlines):
             url = data["image"]["url"]
             log.info("Image uploaded to freeimage.host: %s", url)
             return url
+        else:
+            log.warning("freeimage.host returned unexpected response: %s", data)
     except Exception as e:
-        log.warning("Image upload failed: %s", e)
+        log.warning("freeimage.host upload failed: %s", e)
+    
+    # Fallback: Try imgbb.com
+    try:
+        image_bytes = generate_news_image(headlines, platform="linkedin")
+        b64 = base64.b64encode(image_bytes.getvalue()).decode()
+        resp = requests.post(
+            "https://api.imgbb.com/1/upload",
+            data={
+                "key": os.getenv("IMGBB_API_KEY", ""),
+                "image": b64,
+            },
+            timeout=30,
+        )
+        if os.getenv("IMGBB_API_KEY"):
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("success") and data.get("data", {}).get("url"):
+                url = data["data"]["url"]
+                log.info("Image uploaded to imgbb.com: %s", url)
+                return url
+    except Exception as e:
+        log.warning("imgbb.com upload also failed: %s", e)
+    
     return None

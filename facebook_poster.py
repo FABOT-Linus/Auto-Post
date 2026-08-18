@@ -67,8 +67,33 @@ def _upload_image_to_public_host(image_bytes):
             url = data["image"]["url"]
             log.info("Image uploaded to freeimage.host: %s", url)
             return url
+        else:
+            log.warning("freeimage.host returned unexpected response: %s", data)
     except Exception as e:
         log.warning("freeimage.host upload failed: %s", e)
+    
+    # Fallback: Try imgbb.com
+    try:
+        image_bytes.seek(0)
+        b64 = base64.b64encode(image_bytes.getvalue()).decode()
+        resp = requests.post(
+            "https://api.imgbb.com/1/upload",
+            data={
+                "key": os.getenv("IMGBB_API_KEY", ""),  # You'll need to add this to your secrets
+                "image": b64,
+            },
+            timeout=30,
+        )
+        if os.getenv("IMGBB_API_KEY"):
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("success") and data.get("data", {}).get("url"):
+                url = data["data"]["url"]
+                log.info("Image uploaded to imgbb.com: %s", url)
+                return url
+    except Exception as e:
+        log.warning("imgbb.com upload also failed: %s", e)
+    
     return None
 
 

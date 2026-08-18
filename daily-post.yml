@@ -35,6 +35,7 @@ jobs:
           IG_BUSINESS_ACCOUNT_ID: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_MEMBER_URN: ${{ secrets.LINKEDIN_MEMBER_URN }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
           NEWS_KEYWORDS: ${{ vars.NEWS_KEYWORDS }}
           NEWS_CATEGORIES: ${{ vars.NEWS_CATEGORIES }}
           MAX_HEADLINES: ${{ vars.MAX_HEADLINES }}
