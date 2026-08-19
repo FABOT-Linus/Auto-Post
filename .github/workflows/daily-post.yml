@@ -2,8 +2,17 @@ name: Daily Financial News Post
 
 on:
   schedule:
-    - cron: "40 13 * * *"
+    # 9:10am ET and 4:10pm ET, expressed in UTC.
+    # These times are for US Eastern Daylight Time (UTC-4), which is in
+    # effect roughly mid-March to early November. During Eastern Standard
+    # Time (UTC-5, ~early Nov to mid-March) these will fire an hour later
+    # local time (10:10am / 5:10pm) — GitHub Actions cron doesn't observe DST.
+    - cron: "10 13 * * *"  # 9:10am ET
+    - cron: "10 20 * * *"  # 4:10pm ET
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   post-news:
@@ -46,6 +55,19 @@ jobs:
           ENABLE_LINKEDIN: ${{ vars.ENABLE_LINKEDIN }}
         run: |
           python main.py 2>&1 | tee post_output.log
+
+      - name: Save posted-headline history
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain post_history.json)" ]; then
+            git config user.name "BOBNews Bot"
+            git config user.email "actions@github.com"
+            git add post_history.json
+            git commit -m "Update post history [skip ci]"
+            git push
+          else
+            echo "No history changes to commit."
+          fi
 
       - name: Email notification
         if: always()
